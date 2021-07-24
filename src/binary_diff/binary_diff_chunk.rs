@@ -16,7 +16,9 @@ pub enum BinaryDiffChunk {
 impl fmt::Display for BinaryDiffChunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Same(offset, length) => write!(f, "Same  (offset={:#x}, length={:#x})", offset, length),
+            Self::Same(offset, length) => {
+                write!(f, "Same  (offset={:#x}, length={:#x})", offset, length)
+            }
             Self::Insert(offset, bytes) => write!(
                 f,
                 "Insert(offset={:#x}, bytes=[{}])",

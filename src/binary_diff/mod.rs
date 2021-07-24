@@ -27,36 +27,48 @@ fn read_one_byte<R: Read + Seek>(reader: &mut BufReader<R>) -> Result<[u8; 1]> {
     Ok(buf)
 }
 
-fn contains<R: Read + Seek>(
-    reader: &mut BufReader<R>,
-    bytes: &[u8],
-    window: usize,
-) -> Result<bool> {
-    let original_position = reader.stream_position().map_err(BinaryDiffError::IoError)?;
+// fn find<R: Read + Seek>(
+//     reader: &mut BufReader<R>,
+//     bytes: &[u8],
+//     window: usize,
+// ) -> Result<Option<usize>> {
+//     let original_position = reader.stream_position().map_err(BinaryDiffError::IoError)?;
+//
+//     // NOTE: windows mut be equal to or smaller than remaining buffer
+//     let mut buf = vec![];
+//     buf.resize(window, 0u8); // Apply window size
+//     reader
+//         .read_exact(&mut buf)
+//         .map_err(BinaryDiffError::IoError)?;
+//
+//     reader
+//         .seek(SeekFrom::Start(original_position))
+//         .map_err(BinaryDiffError::IoError)?;
+//
+//     for i in 0..window {
+//         if buf[i..buf.len()].starts_with(bytes) {
+//             return Ok(Some(i));
+//         }
+//     }
+//     Ok(None)
+// }
 
-    // NOTE: windows mut be equal to or smaller than remaining buffer
-    let mut buf = vec![];
-    buf.resize(window, 0u8); // Apply window size
-    reader
-        .read_exact(&mut buf)
-        .map_err(BinaryDiffError::IoError)?;
-
-    reader
-        .seek(SeekFrom::Start(original_position))
-        .map_err(BinaryDiffError::IoError)?;
-
-    Ok(bytes
-        .iter()
-        .fold(true, |result, v| result && buf.contains(v)))
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    for (i, _) in haystack.iter().enumerate() {
+        if haystack[i..haystack.len()].starts_with(needle) {
+            return Some(i)
+        }
+    }
+    None
 }
 
-// fn read_bytes<R: Read + Seek>(reader: &mut BufReader<R>, length: usize) -> Result<Vec<u8>> {
-//     let mut buf = vec![0u8; length];
-//     reader
-//         .read_exact(&mut buf.as_mut_slice())
-//         .map_err(BinaryDiffError::IoError)?;
-//     Ok(buf)
-// }
+fn read_bytes<R: Read + Seek>(reader: &mut BufReader<R>, length: usize) -> Result<Vec<u8>> {
+    let mut buf = vec![0u8; length];
+    reader
+        .read_exact(&mut buf.as_mut_slice())
+        .map_err(BinaryDiffError::IoError)?;
+    Ok(buf)
+}
 
 fn get_same_chunk<R: Read + Seek>(
     old: &mut BufReader<R>,
@@ -104,26 +116,8 @@ fn get_delete_chunk<R: Read + Seek>(
     let offset = old.stream_position().map_err(BinaryDiffError::IoError)? as usize;
 
     let new_position = new.stream_position().map_err(BinaryDiffError::IoError)? as usize;
-    let window = min(32, new_size - new_position);
 
-    #[allow(non_snake_case)]
-    let N = min(old_size - offset, new_size - new_position);
-    log::trace!("[*] get_delete_chunk(): offset = {}, N = {}", offset, N);
-
-    if N > 0 {
-        for i in 0usize..N {
-            if contains(new, &read_one_byte(old)?, window)? {
-                old.seek_relative(-1).map_err(BinaryDiffError::IoError)?;
-                return if i > 0 {
-                    Ok(Some(BinaryDiffChunk::Delete(offset, i)))
-                } else {
-                    Ok(None)
-                };
-            }
-        }
-    }
-
-    if new.stream_position().map_err(BinaryDiffError::IoError)? == new_size as u64 {
+    if new_position == new_size {
         // Remaining bytes in `old` might be deleted
         old.seek(SeekFrom::End(0))
             .map_err(BinaryDiffError::IoError)?;
@@ -135,7 +129,32 @@ fn get_delete_chunk<R: Read + Seek>(
         };
     }
 
+    #[allow(non_snake_case)]
+    let N = min(old_size - offset, new_size - new_position);
+    log::trace!("[*] get_delete_chunk(): offset = {}, N = {}", offset, N);
+
     if N > 0 {
+        let window = min(32, new_size - new_position);
+
+        let new_bytes_in_window = read_bytes(new, window)?;
+        new.seek_relative(-(window as i64)).map_err(BinaryDiffError::IoError)?;
+        let old_buf =  read_bytes(old, N)?;
+
+        // Find offset that minimizes `offset` of next Same(offset, length)
+        if let Some((next_same_offset, _)) = (0..N)
+            .map(|i| (i, find(new_bytes_in_window.as_slice(), &[old_buf[i]])))
+            .filter(|(_, v)| v.is_some())
+            .min_by_key(|(_, v)| v.clone())
+        {
+            old.seek_relative(-(N as i64) + next_same_offset as i64)
+                .map_err(BinaryDiffError::IoError)?;
+            return if next_same_offset > 0 {
+                Ok(Some(BinaryDiffChunk::Delete(offset, next_same_offset)))
+            } else {
+                Ok(None)
+            }
+        }
+
         Ok(Some(BinaryDiffChunk::Delete(offset, N)))
     } else {
         Ok(None)
@@ -224,6 +243,10 @@ mod tests {
     use crate::binary_diff::result::Result;
     use std::io::{BufReader, Cursor};
 
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
     fn diff_wrapper(old: &Vec<u8>, new: &Vec<u8>) -> Result<Vec<BinaryDiffChunk>> {
         diff(
             &mut BufReader::new(Cursor::new(old)),
@@ -233,6 +256,8 @@ mod tests {
 
     #[test]
     fn test_chunks_same() {
+        init();
+
         let old = vec![0, 1, 2, 3];
         let new = vec![0, 1, 2, 3];
         let diff_chunks = diff_wrapper(&old, &new);
@@ -245,6 +270,8 @@ mod tests {
 
     #[test]
     fn test_chunks_same_delete() {
+        init();
+
         let old = vec![0, 1, 2, 3];
         let new = vec![0, 1];
         let diff_chunks = diff_wrapper(&old, &new);
@@ -257,6 +284,8 @@ mod tests {
 
     #[test]
     fn test_chunks_same_insert() {
+        init();
+
         let old = vec![0, 1];
         let new = vec![0, 1, 2, 3];
         let diff_chunks = diff_wrapper(&old, &new);
@@ -271,7 +300,31 @@ mod tests {
     }
 
     #[test]
+    fn test_chunks_same_insert_same() {
+        init();
+
+        let old = vec![0x00, 0x0b, 0x01, 0x00, 0x03, 0xfe, 0x00, 0x03];
+        let new = vec![0x00, 0x0b, 0x01, 0xfd, 0x03, 0xfe, 0x00, 0x03];
+        let diff_chunks = diff_wrapper(&old, &new);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
+        assert!(diff_chunks.is_ok());
+        if let Ok(diff_chunks) = diff_chunks {
+            assert_eq!(
+                diff_chunks,
+                vec![
+                    Same(0, 3),
+                    Delete(3, 1),
+                    Insert(4, new[3..=3].to_vec()),
+                    Same(4, 4)
+                ]
+            );
+        }
+    }
+
+    #[test]
     fn test_chunks_delete() {
+        init();
+
         let old = vec![0, 1];
         let new = vec![];
         let diff_chunks = diff_wrapper(&old, &new);
@@ -284,6 +337,8 @@ mod tests {
 
     #[test]
     fn test_chunks_delete_insert() {
+        init();
+
         let old = vec![0, 1];
         let new = vec![2, 3];
         let diff_chunks = diff_wrapper(&old, &new);
@@ -299,6 +354,8 @@ mod tests {
 
     #[test]
     fn test_chunks_delete_insert_same() {
+        init();
+
         let old = vec![0, 1, 4];
         let new = vec![2, 3, 4];
         let diff_chunks = diff_wrapper(&old, &new);
@@ -314,6 +371,8 @@ mod tests {
 
     #[test]
     fn test_chunks_delete_same_insert() {
+        init();
+
         let old = vec![0, 1, 2];
         let new = vec![2, 3, 4];
         let diff_chunks = diff_wrapper(&old, &new);
