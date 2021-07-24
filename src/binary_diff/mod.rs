@@ -72,6 +72,8 @@ fn read_bytes<R: Read + Seek>(reader: &mut BufReader<R>, length: usize) -> Resul
     Ok(buf)
 }
 
+// get_same_chunk() should satisfy following requirements:
+//   - Maximize `length` of Same(offset, length)
 fn get_same_chunk<R: Read + Seek>(
     old: &mut BufReader<R>,
     new: &mut BufReader<R>,
@@ -110,6 +112,8 @@ fn get_same_chunk<R: Read + Seek>(
     Ok(Some(BinaryDiffChunk::Same(offset, N)))
 }
 
+// get_delete_chunk() should satisfy following requirements:
+//   - Minimize `length` of Delete(offset, length)
 fn get_delete_chunk<R: Read + Seek>(
     old: &mut BufReader<R>,
     new: &mut BufReader<R>,
@@ -165,6 +169,8 @@ fn get_delete_chunk<R: Read + Seek>(
     }
 }
 
+// get_insert_chunk() should satisfy following requirements:
+//   - Maximize length of `bytes` of Insert(offset, bytes)
 fn get_insert_chunk<R: Read + Seek>(
     old: &mut BufReader<R>,
     new: &mut BufReader<R>,
@@ -252,7 +258,10 @@ fn get_insert_chunk<R: Read + Seek>(
     }
 }
 
-pub fn diff<R: Read + Seek>(
+// binary_diff() should satisfy following requirements:
+//   - Minimize the length of the return value
+//   - An item and its next one is NOT the same
+pub fn binary_diff<R: Read + Seek>(
     old: &mut BufReader<R>,
     new: &mut BufReader<R>,
 ) -> Result<Vec<BinaryDiffChunk>> {
@@ -303,7 +312,7 @@ pub fn diff<R: Read + Seek>(
 mod tests {
     use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk;
     use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk::{Delete, Insert, Same};
-    use crate::binary_diff::diff;
+    use crate::binary_diff::binary_diff;
     use crate::binary_diff::result::Result;
     use std::io::{BufReader, Cursor};
 
@@ -312,7 +321,7 @@ mod tests {
     }
 
     fn diff_wrapper(old: &Vec<u8>, new: &Vec<u8>) -> Result<Vec<BinaryDiffChunk>> {
-        diff(
+        binary_diff(
             &mut BufReader::new(Cursor::new(old)),
             &mut BufReader::new(Cursor::new(new)),
         )
