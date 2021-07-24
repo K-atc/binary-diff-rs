@@ -3,6 +3,7 @@ use crate::binary_diff::error::BinaryDiffError;
 use result::Result;
 use std::cmp::min;
 use std::io::{BufReader, Read, Seek, SeekFrom};
+// use alloc::vec::Vec;
 
 pub mod binary_diff_chunk;
 pub mod error;
@@ -63,19 +64,14 @@ fn get_same_chunk<R: Read + Seek>(
     old_size: usize,
     new_size: usize,
 ) -> Result<Option<BinaryDiffChunk>> {
-    let offset = old
-        .stream_position()
-        .map_err(BinaryDiffError::StreamPositionError)? as usize;
+    let offset = old.stream_position().map_err(BinaryDiffError::IoError)? as usize;
 
     #[allow(non_snake_case)]
     let N = min(
         old_size - offset,
-        new_size
-            - new
-                .stream_position()
-                .map_err(BinaryDiffError::StreamPositionError)? as usize,
+        new_size - new.stream_position().map_err(BinaryDiffError::IoError)? as usize,
     );
-    println!("[*] get_same_chunk():   offset = {}, N = {}", offset, N);
+    log::trace!("[*] get_same_chunk():   offset = {}, N = {}", offset, N);
 
     for i in 0usize..N {
         let old_buf = read_one_byte(old)?;
@@ -105,18 +101,14 @@ fn get_delete_chunk<R: Read + Seek>(
     old_size: usize,
     new_size: usize,
 ) -> Result<Option<BinaryDiffChunk>> {
-    let offset = old
-        .stream_position()
-        .map_err(BinaryDiffError::StreamPositionError)? as usize;
+    let offset = old.stream_position().map_err(BinaryDiffError::IoError)? as usize;
 
-    let new_position = new
-        .stream_position()
-        .map_err(BinaryDiffError::StreamPositionError)? as usize;
+    let new_position = new.stream_position().map_err(BinaryDiffError::IoError)? as usize;
     let window = min(32, new_size - new_position);
 
     #[allow(non_snake_case)]
     let N = min(old_size - offset, new_size - new_position);
-    println!("[*] get_delete_chunk(): offset = {}, N = {}", offset, N);
+    log::trace!("[*] get_delete_chunk(): offset = {}, N = {}", offset, N);
 
     if N > 0 {
         for i in 0usize..N {
@@ -131,11 +123,7 @@ fn get_delete_chunk<R: Read + Seek>(
         }
     }
 
-    if new
-        .stream_position()
-        .map_err(BinaryDiffError::StreamPositionError)?
-        == new_size as u64
-    {
+    if new.stream_position().map_err(BinaryDiffError::IoError)? == new_size as u64 {
         // Remaining bytes in `old` might be deleted
         old.seek(SeekFrom::End(0))
             .map_err(BinaryDiffError::IoError)?;
@@ -160,37 +148,30 @@ fn get_insert_chunk<R: Read + Seek>(
     old_size: usize,
     new_size: usize,
 ) -> Result<Option<BinaryDiffChunk>> {
-    let offset = old
-        .stream_position()
-        .map_err(BinaryDiffError::StreamPositionError)? as usize;
+    let offset = old.stream_position().map_err(BinaryDiffError::IoError)? as usize;
 
     #[allow(non_snake_case)]
-    let N = new_size
-        - new
-            .stream_position()
-            .map_err(BinaryDiffError::StreamPositionError)? as usize;
-    println!("[*] get_insert_chunk(): offset = {}, N = {}", offset, N);
+    let N = new_size - new.stream_position().map_err(BinaryDiffError::IoError)? as usize;
+    log::trace!("[*] get_insert_chunk(): offset = {}, N = {}", offset, N);
 
     let mut inserted_bytes = vec![];
 
     if N > 0 {
         if offset < old_size {
             let old_next_byte = read_one_byte(old)?;
-            old.seek_relative(-1)
-                .map_err(BinaryDiffError::StreamPositionError)?;
+            old.seek_relative(-1).map_err(BinaryDiffError::IoError)?;
 
             for _ in 0usize..N {
                 let new_byte = read_one_byte(new)?;
                 if new_byte == old_next_byte {
-                    new.seek_relative(-1)
-                        .map_err(BinaryDiffError::StreamPositionError)?;
+                    new.seek_relative(-1).map_err(BinaryDiffError::IoError)?;
                     break;
                 }
                 inserted_bytes.extend_from_slice(&new_byte);
             }
         } else {
             // Remaining bytes in `new` might be inserted
-            println!("[*] get_insert_chunk(): Remaining bytes in `new` might be inserted");
+            log::trace!("[*] get_insert_chunk(): Remaining bytes in `new` might be inserted");
             new.read_to_end(&mut inserted_bytes)
                 .map_err(BinaryDiffError::IoError)?;
         }
@@ -209,7 +190,7 @@ pub fn diff<R: Read + Seek>(
 ) -> Result<Vec<BinaryDiffChunk>> {
     let old_size = get_buffer_length(old)?;
     let new_size = get_buffer_length(new)?;
-    println!("[*] old_size, new_size = {}, {}", old_size, new_size);
+    log::trace!("[*] old_size, new_size = {}, {}", old_size, new_size);
 
     let mut chunks = vec![];
 
@@ -225,14 +206,8 @@ pub fn diff<R: Read + Seek>(
             chunks.push(chunk);
         }
 
-        if old
-            .stream_position()
-            .map_err(BinaryDiffError::StreamPositionError)?
-            == old_size as u64
-            && new
-                .stream_position()
-                .map_err(BinaryDiffError::StreamPositionError)?
-                == new_size as u64
+        if old.stream_position().map_err(BinaryDiffError::IoError)? == old_size as u64
+            && new.stream_position().map_err(BinaryDiffError::IoError)? == new_size as u64
         {
             break;
         }
@@ -261,7 +236,7 @@ mod tests {
         let old = vec![0, 1, 2, 3];
         let new = vec![0, 1, 2, 3];
         let diff_chunks = diff_wrapper(&old, &new);
-        println!("[*] diff() = {:?}", diff_chunks);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
         assert!(diff_chunks.is_ok());
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(diff_chunks, vec![Same(0, 4)]);
@@ -273,7 +248,7 @@ mod tests {
         let old = vec![0, 1, 2, 3];
         let new = vec![0, 1];
         let diff_chunks = diff_wrapper(&old, &new);
-        println!("[*] diff() = {:?}", diff_chunks);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
         assert!(diff_chunks.is_ok());
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(diff_chunks, vec![Same(0, 2), Delete(2, 2)]);
@@ -285,7 +260,7 @@ mod tests {
         let old = vec![0, 1];
         let new = vec![0, 1, 2, 3];
         let diff_chunks = diff_wrapper(&old, &new);
-        println!("[*] diff() = {:?}", diff_chunks);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
         assert!(diff_chunks.is_ok());
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(
@@ -300,7 +275,7 @@ mod tests {
         let old = vec![0, 1];
         let new = vec![];
         let diff_chunks = diff_wrapper(&old, &new);
-        println!("[*] diff() = {:?}", diff_chunks);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
         assert!(diff_chunks.is_ok());
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(diff_chunks, vec![Delete(0, 2)]);
@@ -312,7 +287,7 @@ mod tests {
         let old = vec![0, 1];
         let new = vec![2, 3];
         let diff_chunks = diff_wrapper(&old, &new);
-        println!("[*] diff() = {:?}", diff_chunks);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
         assert!(diff_chunks.is_ok());
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(
@@ -327,7 +302,7 @@ mod tests {
         let old = vec![0, 1, 4];
         let new = vec![2, 3, 4];
         let diff_chunks = diff_wrapper(&old, &new);
-        println!("[*] diff() = {:?}", diff_chunks);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
         assert!(diff_chunks.is_ok());
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(
@@ -342,7 +317,7 @@ mod tests {
         let old = vec![0, 1, 2];
         let new = vec![2, 3, 4];
         let diff_chunks = diff_wrapper(&old, &new);
-        println!("[*] diff() = {:?}", diff_chunks);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
         assert!(diff_chunks.is_ok());
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(
