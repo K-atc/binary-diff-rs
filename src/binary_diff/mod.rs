@@ -68,6 +68,7 @@ fn read_bytes<R: Read + Seek>(reader: &mut BufReader<R>, length: usize) -> Resul
     reader
         .read_exact(&mut buf.as_mut_slice())
         .map_err(BinaryDiffError::IoError)?;
+    debug_assert_eq!(buf.len(), length);
     Ok(buf)
 }
 
@@ -106,7 +107,6 @@ fn get_same_chunk<R: Read + Seek>(
         }
     }
 
-    log::trace!("ok");
     Ok(Some(BinaryDiffChunk::Same(offset, N)))
 }
 
@@ -172,49 +172,48 @@ fn get_insert_chunk<R: Read + Seek>(
     new_size: usize,
 ) -> Result<Option<BinaryDiffChunk>> {
     let offset = old.stream_position().map_err(BinaryDiffError::IoError)? as usize;
-
     #[allow(non_snake_case)]
     let N = new_size - new.stream_position().map_err(BinaryDiffError::IoError)? as usize;
-    log::trace!("[*] get_insert_chunk(): offset = {}, N = {}", offset, N);
+    let window = min(N, 16);
+    log::trace!("[*] get_insert_chunk(): offset = {}, N = {}, window = {}", offset, N, window);
 
     if N == 0 {
         return Ok(None);
     }
 
-    let window = min(min(N, old_size - offset), 16);
-
     if offset < old_size {
-        let old_bytes = read_bytes(old, window)?;
+        let old_bytes = read_bytes(old, min(window, old_size - offset))?;
         let new_bytes = read_bytes(new, window)?;
-        debug_assert_eq!(old_bytes.len(), window);
-        debug_assert_eq!(new_bytes.len(), window);
 
-        let result = longest_common_substring(
+        let lcs = longest_common_substring(
             old_bytes.as_slice(),
             new_bytes.as_slice(),
             AlgoSpec::HashMatch(1),
         );
+        log::trace!("[*] get_insert_chunk(): old_bytes = {:?}", old_bytes);
+        log::trace!("[*] get_insert_chunk(): new_bytes = {:?}", new_bytes);
+        log::trace!("[*] get_insert_chunk(): lcs = {:?}", lcs);
         assert_eq!(
-            result.first_pos, 0,
-            "There must be bytes deleted first in `old`"
+            lcs.first_pos, 0,
+            "There must be bytes deleted beforehand in `old`"
         );
 
-        old.seek_relative(-(window as i64))
+        old.seek_relative(-(old_bytes.len() as i64))
             .map_err(BinaryDiffError::IoError)?;
-        new.seek_relative(-(window as i64) + (result.second_pos as i64))
+        new.seek_relative(-(new_bytes.len() as i64) + (lcs.second_pos as i64))
             .map_err(BinaryDiffError::IoError)?;
 
-        if result.length > 0 {
-            if result.second_pos > 0 {
-                return Ok(Some(BinaryDiffChunk::Insert(
+        if lcs.length > 0 {
+            if lcs.second_pos > 0 {
+                Ok(Some(BinaryDiffChunk::Insert(
                     offset,
-                    new_bytes[0..result.second_pos].to_vec(),
-                )));
+                    new_bytes[0..lcs.second_pos].to_vec(),
+                )))
             } else {
                 // This is case of old_bytes[0..k] == new_bytes[0..k]
-                debug_assert_eq!(old_bytes[0..result.length], new_bytes[0..result.length]);
+                debug_assert_eq!(old_bytes[0..lcs.length], new_bytes[0..lcs.length]);
                 log::trace!("[*] get_insert_chunk(): old_bytes[0..k] == new_bytes[0..k]");
-                return Ok(None);
+                Ok(None)
             }
         } else {
             let old_next_byte = read_one_byte(old)?;
@@ -231,12 +230,12 @@ fn get_insert_chunk<R: Read + Seek>(
                 inserted_bytes.extend_from_slice(&new_byte);
             }
 
-            return if inserted_bytes.len() > 0 {
+            if inserted_bytes.len() > 0 {
                 Ok(Some(BinaryDiffChunk::Insert(offset, inserted_bytes)))
             } else {
                 // inserted_bytes.len() must be larger than 0 since N > 0, but fail safe
                 Ok(None)
-            };
+            }
         }
     } else {
         // Remaining bytes in `new` might be inserted
@@ -430,6 +429,23 @@ mod tests {
             assert_eq!(
                 diff_chunks,
                 vec![Delete(0, 2), Insert(2, new[0..=1].to_vec()), Same(2, 1)]
+            );
+        }
+    }
+
+    #[test]
+    fn test_chunks_delete_insert_same_subset() {
+        init();
+
+        let old = vec![1, 2, 0, 0];
+        let new = vec![0, 3, 0, 0];
+        let diff_chunks = diff_wrapper(&old, &new);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
+        assert!(diff_chunks.is_ok());
+        if let Ok(diff_chunks) = diff_chunks {
+            assert_eq!(
+                diff_chunks,
+                vec![Delete(0, 2), Insert(2, new[0..=1].to_vec()), Same(2, 2)]
             );
         }
     }
