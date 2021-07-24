@@ -1,5 +1,6 @@
 use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk;
 use crate::binary_diff::error::BinaryDiffError;
+use bcmp::{longest_common_substring, AlgoSpec};
 use result::Result;
 use std::cmp::min;
 use std::io::{BufReader, Read, Seek, SeekFrom};
@@ -56,7 +57,7 @@ fn read_one_byte<R: Read + Seek>(reader: &mut BufReader<R>) -> Result<[u8; 1]> {
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     for (i, _) in haystack.iter().enumerate() {
         if haystack[i..haystack.len()].starts_with(needle) {
-            return Some(i)
+            return Some(i);
         }
     }
     None
@@ -85,6 +86,10 @@ fn get_same_chunk<R: Read + Seek>(
     );
     log::trace!("[*] get_same_chunk():   offset = {}, N = {}", offset, N);
 
+    if N == 0 {
+        return Ok(None)
+    }
+
     for i in 0usize..N {
         let old_buf = read_one_byte(old)?;
         let new_buf = read_one_byte(new)?;
@@ -93,18 +98,16 @@ fn get_same_chunk<R: Read + Seek>(
             old.seek_relative(-1).map_err(BinaryDiffError::IoError)?;
             new.seek_relative(-1).map_err(BinaryDiffError::IoError)?;
 
-            return if i == 0 {
-                Ok(None)
-            } else {
+            return if i > 0 {
                 Ok(Some(BinaryDiffChunk::Same(offset, i)))
+            } else {
+                Ok(None)
             };
         }
     }
-    if N > 0 {
-        Ok(Some(BinaryDiffChunk::Same(offset, N)))
-    } else {
-        Ok(None)
-    }
+
+    log::trace!("ok");
+    Ok(Some(BinaryDiffChunk::Same(offset, N)))
 }
 
 fn get_delete_chunk<R: Read + Seek>(
@@ -137,8 +140,9 @@ fn get_delete_chunk<R: Read + Seek>(
         let window = min(32, new_size - new_position);
 
         let new_bytes_in_window = read_bytes(new, window)?;
-        new.seek_relative(-(window as i64)).map_err(BinaryDiffError::IoError)?;
-        let old_buf =  read_bytes(old, N)?;
+        new.seek_relative(-(window as i64))
+            .map_err(BinaryDiffError::IoError)?;
+        let old_buf = read_bytes(old, N)?;
 
         // Find offset that minimizes `offset` of next Same(offset, length)
         if let Some((next_same_offset, _)) = (0..N)
@@ -152,7 +156,7 @@ fn get_delete_chunk<R: Read + Seek>(
                 Ok(Some(BinaryDiffChunk::Delete(offset, next_same_offset)))
             } else {
                 Ok(None)
-            }
+            };
         }
 
         Ok(Some(BinaryDiffChunk::Delete(offset, N)))
@@ -173,32 +177,73 @@ fn get_insert_chunk<R: Read + Seek>(
     let N = new_size - new.stream_position().map_err(BinaryDiffError::IoError)? as usize;
     log::trace!("[*] get_insert_chunk(): offset = {}, N = {}", offset, N);
 
-    let mut inserted_bytes = vec![];
+    let window = min(min(N, old_size-offset), 16);
 
     if N > 0 {
         if offset < old_size {
-            let old_next_byte = read_one_byte(old)?;
-            old.seek_relative(-1).map_err(BinaryDiffError::IoError)?;
+            let old_bytes = read_bytes(old, window)?;
+            let new_bytes = read_bytes(new, window)?;
+            debug_assert_eq!(old_bytes.len(), window);
+            debug_assert_eq!(new_bytes.len(), window);
 
-            for _ in 0usize..N {
-                let new_byte = read_one_byte(new)?;
-                if new_byte == old_next_byte {
-                    new.seek_relative(-1).map_err(BinaryDiffError::IoError)?;
-                    break;
+            let result =
+                longest_common_substring(old_bytes.as_slice(), new_bytes.as_slice(), AlgoSpec::HashMatch(1));
+            assert_eq!(
+                result.first_pos, 0,
+                "There must be bytes deleted first in `old`"
+            );
+
+            old.seek_relative(-(window as i64)).map_err(BinaryDiffError::IoError)?;
+            new.seek_relative(-(window as i64) + (result.second_pos as i64)).map_err(BinaryDiffError::IoError)?;
+
+            if result.length > 0 {
+                if result.second_pos > 0 {
+                    return Ok(Some(BinaryDiffChunk::Insert(
+                        offset,
+                        new_bytes[0..result.second_pos].to_vec(),
+                    )))
+                } else {
+                    // This is case of old_bytes[0..k] == new_bytes[0..k]
+                    debug_assert_eq!(old_bytes[0..result.length], new_bytes[0..result.length]);
+                    log::trace!("[*] get_insert_chunk(): old_bytes[0..k] == new_bytes[0..k]");
+                    return Ok(None)
                 }
-                inserted_bytes.extend_from_slice(&new_byte);
+            } else {
+                let old_next_byte = read_one_byte(old)?;
+                old.seek_relative(-1).map_err(BinaryDiffError::IoError)?;
+                let mut inserted_bytes = vec![];
+
+                // `new_bytes` does not have same bytes in `old_bytes`, so insert bytes until a byte appears in old
+                for _ in 0usize..N {
+                    let new_byte = read_one_byte(new)?;
+                    if new_byte == old_next_byte {
+                        new.seek_relative(-1).map_err(BinaryDiffError::IoError)?;
+                        break;
+                    }
+                    inserted_bytes.extend_from_slice(&new_byte);
+                }
+
+                return if inserted_bytes.len() > 0 {
+                    Ok(Some(BinaryDiffChunk::Insert(offset, inserted_bytes)))
+                } else {
+                    // inserted_bytes.len() must be larger than 0 since N > 0, but fail safe
+                    Ok(None)
+                }
             }
-        } else {
-            // Remaining bytes in `new` might be inserted
-            log::trace!("[*] get_insert_chunk(): Remaining bytes in `new` might be inserted");
-            new.read_to_end(&mut inserted_bytes)
-                .map_err(BinaryDiffError::IoError)?;
         }
+    } else {
+        return Ok(None)
     }
 
+    // Remaining bytes in `new` might be inserted
+    log::trace!("[*] get_insert_chunk(): Remaining bytes in `new` might be inserted");
+    let mut inserted_bytes = vec![];
+    new.read_to_end(&mut inserted_bytes)
+        .map_err(BinaryDiffError::IoError)?;
     if inserted_bytes.len() > 0 {
         Ok(Some(BinaryDiffChunk::Insert(offset, inserted_bytes)))
     } else {
+        // inserted_bytes.len() must be larger than 0 since N > 0, but fail safe
         Ok(None)
     }
 }

@@ -4,8 +4,10 @@
 pub mod binary_diff;
 
 // extern crate alloc;
+extern crate bcmp;
 extern crate clap;
 extern crate log;
+
 use crate::binary_diff::diff;
 use clap::{App, Arg};
 use std::io::BufReader;
