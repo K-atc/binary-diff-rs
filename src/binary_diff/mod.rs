@@ -12,7 +12,7 @@ pub mod result;
 mod algorithm;
 mod helper;
 
-use algorithm::{get_delete_chunk, get_insert_chunk, get_same_chunk};
+use algorithm::{get_delete_chunk, get_insert_chunk, get_same_chunk, introduce_replace_chunk};
 use helper::get_buffer_length;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -51,28 +51,36 @@ impl BinaryDiff {
                 new.stream_position().map_err(BinaryDiffError::IoError)?,
             );
             // Seek to end of both of buffers, so exit
-            if (old_size, new_size) == (current_old_position as usize, current_new_position as usize) {
-                break
+            if (old_size, new_size)
+                == (current_old_position as usize, current_new_position as usize)
+            {
+                break;
             }
             // Infinite loop detection
             if (old_position, new_position) == (current_old_position, current_new_position) {
                 return Err(BinaryDiffError::InfiniteLoopError(
                     old_position as usize,
                     new_position as usize,
-                ))
+                ));
             }
         }
 
         Ok(Self { chunks })
     }
 
-    pub fn enhance(&self) -> Self {
-        unimplemented!();
+    pub fn enhance(&self) -> Result<Self> {
+        let mut enhanced_chunks = self.chunks.clone();
+
+        introduce_replace_chunk(&mut enhanced_chunks);
+
+        Ok(Self {
+            chunks: enhanced_chunks,
+        })
     }
 
     pub fn from(chunks: &Vec<BinaryDiffChunk>) -> Self {
         Self {
-            chunks: chunks.to_vec()
+            chunks: chunks.to_vec(),
         }
     }
 
@@ -83,9 +91,9 @@ impl BinaryDiff {
 
 #[cfg(test)]
 mod tests {
-    use crate::binary_diff::BinaryDiff;
     use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk::{Delete, Insert, Same};
     use crate::binary_diff::result::Result;
+    use crate::binary_diff::BinaryDiff;
     use std::io::{BufReader, Cursor};
 
     fn init() {
@@ -123,7 +131,10 @@ mod tests {
         log::trace!("[*] diff() = {:?}", diff_chunks);
         assert!(diff_chunks.is_ok());
         if let Ok(diff_chunks) = diff_chunks {
-            assert_eq!(diff_chunks, BinaryDiff::from(&vec![Same(0, 2), Delete(2, 2)]));
+            assert_eq!(
+                diff_chunks,
+                BinaryDiff::from(&vec![Same(0, 2), Delete(2, 2)])
+            );
         }
     }
 
@@ -209,7 +220,11 @@ mod tests {
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(
                 diff_chunks,
-                BinaryDiff::from(&vec![Delete(0, 2), Insert(2, new[0..=1].to_vec()), Same(2, 1)])
+                BinaryDiff::from(&vec![
+                    Delete(0, 2),
+                    Insert(2, new[0..=1].to_vec()),
+                    Same(2, 1)
+                ])
             );
         }
     }
@@ -226,7 +241,11 @@ mod tests {
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(
                 diff_chunks,
-                BinaryDiff::from(&vec![Delete(0, 2), Insert(2, new[0..=1].to_vec()), Same(2, 2)])
+                BinaryDiff::from(&vec![
+                    Delete(0, 2),
+                    Insert(2, new[0..=1].to_vec()),
+                    Same(2, 2)
+                ])
             );
         }
     }
@@ -243,7 +262,11 @@ mod tests {
         if let Ok(diff_chunks) = diff_chunks {
             assert_eq!(
                 diff_chunks,
-                BinaryDiff::from(&vec![Delete(0, 2), Same(2, 1), Insert(3, new[1..=2].to_vec())])
+                BinaryDiff::from(&vec![
+                    Delete(0, 2),
+                    Same(2, 1),
+                    Insert(3, new[1..=2].to_vec())
+                ])
             );
         }
     }

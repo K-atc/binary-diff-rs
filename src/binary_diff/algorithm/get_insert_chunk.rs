@@ -1,6 +1,6 @@
 use super::super::binary_diff_chunk::BinaryDiffChunk;
 use super::super::error::BinaryDiffError;
-use super::super::helper::{read_one_byte, read_bytes};
+use super::super::helper::{read_bytes, read_one_byte};
 use super::super::result::Result;
 use bcmp::{longest_common_substring, AlgoSpec};
 use std::cmp::min;

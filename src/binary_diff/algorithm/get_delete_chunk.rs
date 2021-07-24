@@ -1,7 +1,7 @@
 use super::super::binary_diff_chunk::BinaryDiffChunk;
 use super::super::error::BinaryDiffError;
+use super::super::helper::{find, read_bytes};
 use super::super::result::Result;
-use super::super::helper::{read_bytes, find};
 use std::cmp::min;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 
