@@ -1,5 +1,5 @@
 // #![no_std]
-// Cannot `no_std` so that BufReader is std::io::BufReader
+// Cannot apply `no_std` since BufReader is std::io::BufReader
 
 pub mod binary_diff;
 
