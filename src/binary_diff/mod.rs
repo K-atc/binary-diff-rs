@@ -21,9 +21,10 @@ pub struct BinaryDiff {
 }
 
 impl BinaryDiff {
-    // BinaryDiff.chunk should satisfy following requirements:
+    // BinaryDiff.chunks should satisfy following requirements:
     //   - Minimize the length of the return value
-    //   - An item and its next one is NOT the same
+    //   - An chunk and its next one is NOT the same
+    //   - Sorted `offset` of chunk(offset, ...) accenting
     pub fn new<R: Read + Seek>(old: &mut BufReader<R>, new: &mut BufReader<R>) -> Result<Self> {
         let old_size = get_buffer_length(old)?;
         let new_size = get_buffer_length(new)?;
@@ -69,19 +70,15 @@ impl BinaryDiff {
     }
 
     pub fn enhance(&self) -> Result<Self> {
-        let mut enhanced_chunks = self.chunks.clone();
-
-        introduce_replace_chunk(&mut enhanced_chunks);
-
         Ok(Self {
-            chunks: enhanced_chunks,
+            chunks: introduce_replace_chunk(&self.chunks),
         })
     }
 
-    pub fn from(chunks: &Vec<BinaryDiffChunk>) -> Self {
-        Self {
-            chunks: chunks.to_vec(),
-        }
+    pub fn from(unsorted_chunks: &Vec<BinaryDiffChunk>) -> Self {
+        let mut chunks = unsorted_chunks.to_vec();
+        chunks.sort();
+        Self { chunks }
     }
 
     pub fn chunks(&self) -> &Vec<BinaryDiffChunk> {

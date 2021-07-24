@@ -39,15 +39,12 @@ $ xxd tests/samples/binary/c298122410da09836c59484e995c287294c31394
 
 Execution result:
 ```
-$ cargo run -q tests/samples/binary/*
-Same  (offset=0x0, length=0xd)
-Delete(offset=0xd, length=0x1)
-Insert(offset=0xe, bytes=[18])
-Same  (offset=0xe, length=0x4)
-Delete(offset=0x12, length=0x4)
-Insert(offset=0x16, bytes=[01 00 03 fe])
-Same  (offset=0x16, length=0x4)
-Delete(offset=0x1a, length=0x1)
-Insert(offset=0x1b, bytes=[1d])
-Same  (offset=0x1b, length=0x2)
+$ cargo run -q -- --same tests/samples/binary/*
+Same   (offset=0x0, length=0xd)
+Replace(offset=0xd, length=0x1, bytes=[18])
+Same   (offset=0xe, length=0x4)
+Replace(offset=0x12, length=0x4, bytes=[01 00 03 fe])
+Same   (offset=0x16, length=0x4)
+Replace(offset=0x1a, length=0x1, bytes=[1d])
+Same   (offset=0x1b, length=0x2)
 ```

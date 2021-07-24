@@ -8,6 +8,7 @@ extern crate bcmp;
 extern crate clap;
 extern crate log;
 
+use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk;
 use binary_diff::BinaryDiff;
 use clap::{App, Arg};
 use std::io::BufReader;
@@ -17,6 +18,12 @@ fn main() {
         .version("1.0")
         .author("Nao Tomori (@K_atc)")
         .about("Show changes between two binaries. Each of value is hex (16 digit) value")
+        .arg(
+            Arg::with_name("same")
+                .long("same")
+                .help("Enables to output Same chunks")
+                .takes_value(false),
+        )
         .arg(
             Arg::with_name("FILE1")
                 .help("Original file")
@@ -42,7 +49,14 @@ fn main() {
         }
     };
 
-    for chunk in diff.chunks() {
-        println!("{}", chunk);
+    let print_same_chunks = matches.is_present("same");
+    for chunk in diff.enhance().unwrap().chunks() {
+        let print = match chunk {
+            BinaryDiffChunk::Same(_, _) => print_same_chunks,
+            _ => true,
+        };
+        if print {
+            println!("{}", chunk);
+        }
     }
 }
