@@ -8,7 +8,7 @@ extern crate bcmp;
 extern crate clap;
 extern crate log;
 
-use crate::binary_diff::binary_diff;
+use binary_diff::BinaryDiff;
 use clap::{App, Arg};
 use std::io::BufReader;
 
@@ -31,18 +31,18 @@ fn main() {
         )
         .get_matches();
 
-    let diff_chunks = match (matches.value_of("FILE1"), matches.value_of("FILE2")) {
+    let diff = match (matches.value_of("FILE1"), matches.value_of("FILE2")) {
         (Some(file_path_1), Some(file_path_2)) => {
             let file_1 = std::fs::File::open(file_path_1).unwrap();
             let file_2 = std::fs::File::open(file_path_2).unwrap();
-            binary_diff(&mut BufReader::new(file_1), &mut BufReader::new(file_2)).unwrap()
+            BinaryDiff::new(&mut BufReader::new(file_1), &mut BufReader::new(file_2)).unwrap()
         }
         _ => {
             panic!("[!] Parameter FILE1 or FILE2 is not specified");
         }
     };
 
-    for chunk in diff_chunks {
+    for chunk in diff.chunks() {
         println!("{}", chunk);
     }
 }
