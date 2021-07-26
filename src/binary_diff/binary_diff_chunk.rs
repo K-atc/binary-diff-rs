@@ -57,7 +57,7 @@ impl fmt::Display for BinaryDiffChunk {
             }
             Self::Insert(offset, bytes) => write!(
                 f,
-                "Insert (offset={:#x}, bytes=[{}])",
+                "Insert (offset={:#x}, bytes={})",
                 offset,
                 stringify_bytes(bytes)
             ),

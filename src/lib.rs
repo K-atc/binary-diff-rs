@@ -4,8 +4,8 @@
 mod binary_diff;
 
 // Exported objects
-pub use binary_diff::BinaryDiff;
-pub use binary_diff::binary_diff_chunk::BinaryDiffChunk;
+pub use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk;
+pub use crate::binary_diff::BinaryDiff;
 
 // extern crate alloc;
 extern crate bcmp;
