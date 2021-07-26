@@ -6,6 +6,8 @@ use clap::{App, Arg};
 use std::io::BufReader;
 
 fn main() {
+    env_logger::init();
+
     let matches = App::new("Binary diff tool")
         .version("1.0")
         .author("Nao Tomori (@K_atc)")

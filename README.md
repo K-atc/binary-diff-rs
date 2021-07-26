@@ -12,7 +12,7 @@ Requirements
 How to install
 ----
 ```shell
-cargo install --git https://github.com/K-atc/binary-diff-rs.git
+cargo install --git https://github.com/K-atc/binary-diff-rs.git --features bin
 ```
 
 
