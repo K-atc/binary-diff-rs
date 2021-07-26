@@ -39,7 +39,7 @@ $ xxd tests/samples/binary/c298122410da09836c59484e995c287294c31394
 
 Execution result:
 ```
-$ cargo run -q -- --same tests/samples/binary/*
+$ cargo run -q --features bin -- --same tests/samples/binary/*
 Same   (offset=0x0, length=0xd)
 Replace(offset=0xd, length=0x1, bytes=[18])
 Same   (offset=0xe, length=0x4)

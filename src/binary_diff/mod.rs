@@ -4,7 +4,7 @@ use result::Result;
 use std::io::{BufReader, Read, Seek};
 // use alloc::vec::Vec;
 
-pub mod binary_diff_chunk;
+pub(crate) mod binary_diff_chunk;
 pub mod error;
 pub mod result;
 
@@ -69,10 +69,10 @@ impl BinaryDiff {
         Ok(Self { chunks })
     }
 
-    pub fn enhance(&self) -> Result<Self> {
-        Ok(Self {
+    pub fn enhance(&self) -> Self {
+        Self {
             chunks: introduce_replace_chunk(&self.chunks),
-        })
+        }
     }
 
     pub fn from(unsorted_chunks: &Vec<BinaryDiffChunk>) -> Self {
