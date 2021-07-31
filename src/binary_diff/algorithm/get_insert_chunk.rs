@@ -90,7 +90,8 @@ pub fn get_insert_chunk<R: Read + Seek>(
             for (i, new_byte) in new_bytes.iter().enumerate() {
                 if new_byte == &old_bytes[0] {
                     return if i > 0 {
-                        new.seek_relative(i as i64).map_err(BinaryDiffError::IoError)?;
+                        new.seek_relative(i as i64)
+                            .map_err(BinaryDiffError::IoError)?;
                         Ok(Some(BinaryDiffChunk::Insert(
                             offset,
                             new_bytes[0..i].to_vec(),

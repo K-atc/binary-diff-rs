@@ -88,6 +88,7 @@ impl BinaryDiff {
 
 #[cfg(test)]
 mod tests {
+    extern crate env_logger;
     use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk::{Delete, Insert, Same};
     use crate::binary_diff::result::Result;
     use crate::binary_diff::BinaryDiff;

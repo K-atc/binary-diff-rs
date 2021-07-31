@@ -24,6 +24,27 @@ impl BinaryDiffChunk {
             BinaryDiffChunk::Replace(offset, _, _) => offset,
         }
     }
+
+    pub fn length(&self) -> Length {
+        match self {
+            BinaryDiffChunk::Same(_, length) => length.clone(),
+            BinaryDiffChunk::Insert(_, bytes) => bytes.len(),
+            BinaryDiffChunk::Delete(_, length) => length.clone(),
+            BinaryDiffChunk::Replace(_, length, _) => length.clone(),
+        }
+    }
+
+    pub fn patched_length(&self) -> Length {
+        match self {
+            BinaryDiffChunk::Delete(_, _) => 0,
+            BinaryDiffChunk::Replace(_, _, bytes) => bytes.len(),
+            _ => self.length(),
+        }
+    }
+
+    pub fn end(&self) -> Offset {
+        self.offset() + self.length()
+    }
 }
 
 impl Ord for BinaryDiffChunk {
