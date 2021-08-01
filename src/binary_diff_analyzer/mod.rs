@@ -49,6 +49,7 @@ fn _derives_from(diff: &BinaryDiff, new_offset: usize, value: u8) -> Option<Deri
                 if (applied_new_offset..(applied_new_offset + length)).contains(&new_offset) {
                     return Some(DerivesFrom {
                         position: Some(old_offset + new_offset - applied_new_offset),
+                        relative_position: new_offset - applied_new_offset,
                         chunk,
                     });
                 }
@@ -58,6 +59,7 @@ fn _derives_from(diff: &BinaryDiff, new_offset: usize, value: u8) -> Option<Deri
                     return if value == bytes[new_offset - applied_new_offset] {
                         Some(DerivesFrom {
                             position: None,
+                            relative_position: new_offset - applied_new_offset,
                             chunk,
                         })
                     } else {
@@ -92,6 +94,7 @@ mod tests {
                 result,
                 Some(DerivesFrom {
                     position: None,
+                    relative_position: 1,
                     chunk: &chunk
                 })
             ),
@@ -113,6 +116,7 @@ mod tests {
             _derives_from(&diff, 4, 0),
             Some(DerivesFrom {
                 position: Some(6),
+                relative_position: 0,
                 chunk: &chunk
             })
         );
@@ -120,6 +124,7 @@ mod tests {
             _derives_from(&diff, 5, 0),
             Some(DerivesFrom {
                 position: Some(7),
+                relative_position: 1,
                 chunk: &chunk
             })
         );
@@ -134,6 +139,7 @@ mod tests {
             _derives_from(&diff, 0, 0),
             Some(DerivesFrom {
                 position: None,
+                relative_position: 0,
                 chunk: &chunk
             })
         );
@@ -141,6 +147,7 @@ mod tests {
             _derives_from(&diff, 1, 1),
             Some(DerivesFrom {
                 position: None,
+                relative_position: 1,
                 chunk: &chunk
             })
         );
@@ -148,6 +155,7 @@ mod tests {
             _derives_from(&diff, 2, 2),
             Some(DerivesFrom {
                 position: None,
+                relative_position: 2,
                 chunk: &chunk
             })
         );
@@ -155,6 +163,7 @@ mod tests {
             _derives_from(&diff, 3, 3),
             Some(DerivesFrom {
                 position: None,
+                relative_position: 3,
                 chunk: &chunk
             })
         );
@@ -169,6 +178,7 @@ mod tests {
             _derives_from(&diff, 4, 0),
             Some(DerivesFrom {
                 position: None,
+                relative_position: 0,
                 chunk: &chunk
             })
         );
@@ -176,6 +186,7 @@ mod tests {
             _derives_from(&diff, 5, 1),
             Some(DerivesFrom {
                 position: None,
+                relative_position: 1,
                 chunk: &chunk
             })
         );
@@ -183,6 +194,7 @@ mod tests {
             _derives_from(&diff, 6, 2),
             Some(DerivesFrom {
                 position: None,
+                relative_position: 2,
                 chunk: &chunk
             })
         );
@@ -190,6 +202,7 @@ mod tests {
             _derives_from(&diff, 7, 3),
             Some(DerivesFrom {
                 position: None,
+                relative_position: 3,
                 chunk: &chunk
             })
         );
@@ -208,6 +221,7 @@ mod tests {
             _derives_from(&diff, 8, 0),
             Some(DerivesFrom {
                 position: Some(6),
+                relative_position: 0,
                 chunk: &chunk
             })
         );
@@ -215,6 +229,7 @@ mod tests {
             _derives_from(&diff, 9, 0),
             Some(DerivesFrom {
                 position: Some(7),
+                relative_position: 1,
                 chunk: &chunk
             })
         );
