@@ -1,20 +1,17 @@
 mod error;
 mod result;
 
+pub(super) mod derives_from;
+
 use crate::{BinaryDiff, BinaryDiffChunk};
 use error::BinaryDiffAnalyzerError;
 use result::Result;
+use derives_from::DerivesFrom;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 
 pub struct BinaryDiffAnalyzer<'a, R: Read + Seek> {
     diff: &'a BinaryDiff,
     patched: BufReader<R>,
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct DerivesFrom<'a> {
-    position: Option<usize>,
-    chunk: &'a BinaryDiffChunk,
 }
 
 impl<'a, R> BinaryDiffAnalyzer<'a, R>

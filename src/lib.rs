@@ -8,6 +8,7 @@ mod binary_diff_analyzer;
 pub use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk;
 pub use crate::binary_diff::BinaryDiff;
 pub use crate::binary_diff_analyzer::BinaryDiffAnalyzer;
+pub use crate::binary_diff_analyzer::derives_from::DerivesFrom;
 
 // extern crate alloc;
 extern crate bcmp;
