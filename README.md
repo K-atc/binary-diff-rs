@@ -56,5 +56,5 @@ Based on above diff, offset 0x12 of patched file derives from chunk `Insert(offs
 
 ```
 $ cargo run -q --features bin -- tests/samples/binary/* --offset 12
-Insert (offset=0x16, bytes=[01 00 03 fe])
+DerivesFrom { position: None, chunk: Insert(22, [1, 0, 3, 254]) }
 ```

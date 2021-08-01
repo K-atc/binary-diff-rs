@@ -3,7 +3,8 @@ extern crate clap;
 
 use binary_diff::{BinaryDiff, BinaryDiffAnalyzer, BinaryDiffChunk};
 use clap::{App, Arg};
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::BufReader;
+use std::path::Path;
 
 fn main() {
     env_logger::init();
@@ -51,23 +52,13 @@ fn main() {
 
     if matches.is_present("OFFSET") {
         let offset = usize::from_str_radix(matches.value_of("OFFSET").unwrap(), 16).unwrap();
+        let patched_file =
+            std::fs::File::open(Path::new(matches.value_of("FILE2").unwrap())).unwrap();
 
-        let value = {
-            let mut file_buf_2 =
-                BufReader::new(std::fs::File::open(matches.value_of("FILE2").unwrap()).unwrap());
-            file_buf_2.seek(SeekFrom::Start(offset as u64)).unwrap();
-            let mut value = [0u8; 1];
-            file_buf_2.read_exact(&mut value).unwrap();
-            value[0]
-        };
-
-        let analyzer = BinaryDiffAnalyzer::new(&diff);
-        match analyzer.derives_from(offset, value) {
-            Some(chunk) => println!("{}", chunk),
-            None => eprintln!(
-                "[!] (offset={:#x}, value={:#x}) does not derive from no chunks",
-                offset, value
-            ),
+        let mut analyzer = BinaryDiffAnalyzer::new(&diff, &patched_file);
+        match analyzer.derives_from(offset).unwrap() {
+            Some(derives_from) => println!("{:?}", derives_from),
+            None => eprintln!("[!] offset={:#x} does not derive from no chunks", offset),
         }
     } else {
         let print_same_chunks = matches.is_present("same");
