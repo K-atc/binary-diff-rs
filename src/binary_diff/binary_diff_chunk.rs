@@ -45,6 +45,15 @@ impl BinaryDiffChunk {
     pub fn end(&self) -> Offset {
         self.offset() + self.length()
     }
+
+    pub fn name(&self) -> &str {
+        match self {
+            BinaryDiffChunk::Same(_, _) => "Same",
+            BinaryDiffChunk::Delete(_, _) => "Delete",
+            BinaryDiffChunk::Insert(_, _) => "Insert",
+            BinaryDiffChunk::Replace(_, _, _) => "Replace",
+        }
+    }
 }
 
 impl Ord for BinaryDiffChunk {
