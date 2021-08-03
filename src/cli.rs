@@ -55,9 +55,10 @@ fn main() {
         let patched_file =
             std::fs::File::open(Path::new(matches.value_of("FILE2").unwrap())).unwrap();
 
-        let mut analyzer = BinaryDiffAnalyzer::new(&diff, &patched_file);
+        let enhanced_diff = diff.enhance();
+        let mut analyzer = BinaryDiffAnalyzer::new(&enhanced_diff, &patched_file);
         match analyzer.derives_from(offset).unwrap() {
-            Some(derives_from) => println!("{:?}", derives_from),
+            Some(derives_from) => println!("{}", derives_from.chunk),
             None => eprintln!("[!] offset={:#x} does not derive from no chunks", offset),
         }
     } else {
