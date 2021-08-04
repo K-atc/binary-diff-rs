@@ -4,9 +4,9 @@ mod result;
 pub(super) mod derives_from;
 
 use crate::{BinaryDiff, BinaryDiffChunk};
+use derives_from::DerivesFrom;
 use error::BinaryDiffAnalyzerError;
 use result::Result;
-use derives_from::DerivesFrom;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 
 pub struct BinaryDiffAnalyzer<'a, R: Read + Seek> {
@@ -44,21 +44,20 @@ where
 fn _derives_from(diff: &BinaryDiff, new_offset: usize, value: u8) -> Option<DerivesFrom> {
     let mut applied_new_offset = 0usize;
     for chunk in diff.chunks().iter() {
-        match chunk {
-            BinaryDiffChunk::Same(old_offset, length) => {
-                if (applied_new_offset..(applied_new_offset + length)).contains(&new_offset) {
+        if (applied_new_offset..(applied_new_offset + chunk.patched_length())).contains(&new_offset)
+        {
+            match chunk {
+                BinaryDiffChunk::Same(_, _) => {
                     return Some(DerivesFrom {
-                        position: Some(old_offset + new_offset - applied_new_offset),
+                        patched_position: new_offset,
                         relative_position: new_offset - applied_new_offset,
                         chunk,
-                    });
+                    })
                 }
-            }
-            BinaryDiffChunk::Insert(_, bytes) | BinaryDiffChunk::Replace(_, _, bytes) => {
-                if (applied_new_offset..(applied_new_offset + bytes.len())).contains(&new_offset) {
+                BinaryDiffChunk::Insert(_, bytes) | BinaryDiffChunk::Replace(_, _, bytes) => {
                     return if value == bytes[new_offset - applied_new_offset] {
                         Some(DerivesFrom {
-                            position: None,
+                            patched_position: new_offset,
                             relative_position: new_offset - applied_new_offset,
                             chunk,
                         })
@@ -66,9 +65,9 @@ fn _derives_from(diff: &BinaryDiff, new_offset: usize, value: u8) -> Option<Deri
                         None
                     };
                 }
+                // NOTE: Delete() chunk does not affect patched files
+                BinaryDiffChunk::Delete(_, _) => (),
             }
-            // NOTE: Delete() chunk does not affect patched files
-            BinaryDiffChunk::Delete(_, _) => (),
         }
 
         applied_new_offset += chunk.patched_length()
@@ -93,7 +92,7 @@ mod tests {
             Ok(result) => assert_eq!(
                 result,
                 Some(DerivesFrom {
-                    position: None,
+                    patched_position: 1,
                     relative_position: 1,
                     chunk: &chunk
                 })
@@ -115,7 +114,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 4, 0),
             Some(DerivesFrom {
-                position: Some(6),
+                patched_position: 4,
                 relative_position: 0,
                 chunk: &chunk
             })
@@ -123,7 +122,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 5, 0),
             Some(DerivesFrom {
-                position: Some(7),
+                patched_position: 5,
                 relative_position: 1,
                 chunk: &chunk
             })
@@ -138,7 +137,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 0, 0),
             Some(DerivesFrom {
-                position: None,
+                patched_position: 0,
                 relative_position: 0,
                 chunk: &chunk
             })
@@ -146,7 +145,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 1, 1),
             Some(DerivesFrom {
-                position: None,
+                patched_position: 1,
                 relative_position: 1,
                 chunk: &chunk
             })
@@ -154,7 +153,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 2, 2),
             Some(DerivesFrom {
-                position: None,
+                patched_position: 2,
                 relative_position: 2,
                 chunk: &chunk
             })
@@ -162,7 +161,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 3, 3),
             Some(DerivesFrom {
-                position: None,
+                patched_position: 3,
                 relative_position: 3,
                 chunk: &chunk
             })
@@ -177,7 +176,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 4, 0),
             Some(DerivesFrom {
-                position: None,
+                patched_position: 4,
                 relative_position: 0,
                 chunk: &chunk
             })
@@ -185,7 +184,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 5, 1),
             Some(DerivesFrom {
-                position: None,
+                patched_position: 5,
                 relative_position: 1,
                 chunk: &chunk
             })
@@ -193,7 +192,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 6, 2),
             Some(DerivesFrom {
-                position: None,
+                patched_position: 6,
                 relative_position: 2,
                 chunk: &chunk
             })
@@ -201,7 +200,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 7, 3),
             Some(DerivesFrom {
-                position: None,
+                patched_position: 7,
                 relative_position: 3,
                 chunk: &chunk
             })
@@ -220,7 +219,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 8, 0),
             Some(DerivesFrom {
-                position: Some(6),
+                patched_position: 8,
                 relative_position: 0,
                 chunk: &chunk
             })
@@ -228,7 +227,7 @@ mod tests {
         assert_eq!(
             _derives_from(&diff, 9, 0),
             Some(DerivesFrom {
-                position: Some(7),
+                patched_position: 9,
                 relative_position: 1,
                 chunk: &chunk
             })

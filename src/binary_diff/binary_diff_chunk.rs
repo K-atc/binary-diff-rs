@@ -25,6 +25,7 @@ impl BinaryDiffChunk {
         }
     }
 
+    // Returns how much bytes will be affected in original binary
     pub fn length(&self) -> Length {
         match self {
             BinaryDiffChunk::Same(_, length) => length.clone(),
@@ -34,6 +35,7 @@ impl BinaryDiffChunk {
         }
     }
 
+    // Returns how much bytes will be introduced to patched binary
     pub fn patched_length(&self) -> Length {
         match self {
             BinaryDiffChunk::Delete(_, _) => 0,
