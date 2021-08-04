@@ -58,7 +58,7 @@ fn main() {
         let enhanced_diff = diff.enhance();
         let mut analyzer = BinaryDiffAnalyzer::new(&enhanced_diff, &patched_file);
         match analyzer.derives_from(offset).unwrap() {
-            Some(derives_from) => println!("{}", derives_from.chunk),
+            Some(derives_from) => println!("{}", derives_from.chunk()),
             None => eprintln!("[!] offset={:#x} does not derive from no chunks", offset),
         }
     } else {
