@@ -39,7 +39,7 @@ pub fn get_delete_chunk<R: Read + Seek>(
             // Find offset that minimizes `offset` of next Same(offset, length)
 
             let old_window = min(window, old_size - offset);
-            let new_window = min(16, new_size - new_position);
+            let new_window = min(window, new_size - new_position);
             if old_window == 0 || new_window == 0 {
                 break;
             }

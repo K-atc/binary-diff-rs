@@ -120,7 +120,7 @@ impl fmt::Display for BinaryDiffChunk {
 
 #[cfg(test)]
 mod tests {
-    use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk::{Same, Insert};
+    use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk::{Insert, Same};
 
     #[test]
     fn test_binary_diff_chunk_ordering() {
