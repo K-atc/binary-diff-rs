@@ -306,11 +306,14 @@ mod tests {
         // From real world samples
         let old = vec![
             0x2e, 0x03, 0x00, 0x00, 0x03, 0xfe, 0xe3, 0xe3, 0x2e, 0x03, 0x00, 0x00, 0x00, 0x2e,
+            //                                                          ~~~~ Delete
             0x03, 0x00,
         ];
         let new = vec![
             0x2e, 0x03, 0x00, 0x00, 0x03, 0xfe, 0x2e, 0x03, 0x18, 0x03, 0x18, 0x00, 0x00, 0x2e,
+            //                                  ~~~~~~~~~~ Same               ~~~~~~~~~~~~~~~~ Same
             0x03, 0x00,
+            // ~~~~~~~ Same
         ];
         let diff_chunks = binary_diff_wrapper(&old, &new);
         log::trace!("[*] diff() = {:?}", diff_chunks);
@@ -322,9 +325,9 @@ mod tests {
                     Same(0x0, 0x6),
                     Delete(0x6, 0x2),
                     Same(0x8, 0x2),
-                    Delete(0xa, 0x3),
-                    Insert(0xd, vec![0x18, 0x03, 0x18, 0x00, 0x00]),
-                    Same(0xd, 3),
+                    Delete(0xa, 0x1),
+                    Insert(0xb, vec![0x18, 0x03, 0x18]),
+                    Same(0xb, 5),
                 ])
             );
         }

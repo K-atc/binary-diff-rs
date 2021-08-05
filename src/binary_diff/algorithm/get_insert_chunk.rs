@@ -18,12 +18,7 @@ pub fn get_insert_chunk<R: Read + Seek>(
     #[allow(non_snake_case)]
     let N = new_size - new.stream_position().map_err(BinaryDiffError::IoError)? as usize;
     let window = min(N, 16);
-    log::trace!(
-        "[*] get_insert_chunk(): offset = {}, N = {}, window = {}",
-        offset,
-        N,
-        window
-    );
+    log::trace!("offset = {}, N = {}, window = {}", offset, N, window);
 
     if N == 0 {
         return Ok(None);
@@ -38,9 +33,9 @@ pub fn get_insert_chunk<R: Read + Seek>(
             new_bytes.as_slice(),
             AlgoSpec::HashMatch(1),
         );
-        log::trace!("[*] get_insert_chunk(): old_bytes = {:?}", old_bytes);
-        log::trace!("[*] get_insert_chunk(): new_bytes = {:?}", new_bytes);
-        log::trace!("[*] get_insert_chunk(): lcs = {:?}", lcs);
+        log::trace!("old_bytes = {:?}", old_bytes);
+        log::trace!("new_bytes = {:?}", new_bytes);
+        log::trace!("lcs = {:?}", lcs);
 
         // Restore original position
         old.seek_relative(-(old_bytes.len() as i64))

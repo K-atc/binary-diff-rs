@@ -60,7 +60,16 @@ impl BinaryDiffChunk {
 
 impl Ord for BinaryDiffChunk {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.offset().cmp(&other.offset())
+        let res = self.offset().cmp(&other.offset());
+        if res.is_eq() {
+            match (self, other) {
+                (BinaryDiffChunk::Same(_, _), _) => Ordering::Greater,
+                (_, BinaryDiffChunk::Same(_, _)) => Ordering::Less,
+                _ => Ordering::Equal,
+            }
+        } else {
+            res
+        }
     }
 }
 
@@ -106,5 +115,15 @@ impl fmt::Display for BinaryDiffChunk {
                 )
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::binary_diff::binary_diff_chunk::BinaryDiffChunk::{Same, Insert};
+
+    #[test]
+    fn test_binary_diff_chunk_ordering() {
+        assert!(Insert(1, vec![1]) < Same(1, 1));
     }
 }

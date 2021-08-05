@@ -20,7 +20,7 @@ pub fn get_same_chunk<R: Read + Seek>(
         old_size - offset,
         new_size - new.stream_position().map_err(BinaryDiffError::IoError)? as usize,
     );
-    log::trace!("[*] get_same_chunk():   offset = {}, N = {}", offset, N);
+    log::trace!("offset = {}, N = {}", offset, N);
 
     if N == 0 {
         return Ok(None);
