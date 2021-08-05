@@ -1,6 +1,6 @@
 use super::super::binary_diff_chunk::BinaryDiffChunk;
 use super::super::error::BinaryDiffError;
-use super::super::helper::{read_bytes};
+use super::super::helper::read_bytes;
 use super::super::result::Result;
 use bcmp::{longest_common_substring, AlgoSpec};
 use std::cmp::min;
@@ -24,7 +24,8 @@ pub fn get_insert_chunk<R: Read + Seek>(
     }
 
     if offset < old_size {
-        for window in [4, 8, 16, 32, 64] {
+        // NOTE: window=2 is required to detect Insert(offset, length=1) chunk
+        for window in [2, 4, 8, 16, 32, 64] {
             let old_bytes = read_bytes(old, min(window, old_size - offset))?;
             let new_bytes = read_bytes(new, min(window, N))?;
 

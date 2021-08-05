@@ -38,12 +38,15 @@ impl BinaryDiff {
             let new_position = new.stream_position().map_err(BinaryDiffError::IoError)?;
 
             if let Some(chunk) = get_same_chunk(old, new, old_size, new_size)? {
+                log::trace!("Added {:?}", chunk);
                 chunks.push(chunk);
             }
             if let Some(chunk) = get_delete_chunk(old, new, old_size, new_size)? {
+                log::trace!("Added {:?}", chunk);
                 chunks.push(chunk);
             }
             if let Some(chunk) = get_insert_chunk(old, new, old_size, new_size)? {
+                log::trace!("Added {:?}", chunk);
                 chunks.push(chunk);
             }
 
@@ -241,8 +244,10 @@ mod tests {
                 diff_chunks,
                 BinaryDiff::from(&vec![
                     Delete(0, 2),
-                    Insert(2, new[0..=1].to_vec()),
-                    Same(2, 2)
+                    Same(2, 1),
+                    Insert(3, vec![3]),
+                    Same(3, 1),
+                    Insert(4, vec![0]),
                 ])
             );
         }
@@ -305,6 +310,7 @@ mod tests {
 
         // From real world samples
         let old = vec![
+            //                                              8
             0x2e, 0x03, 0x00, 0x00, 0x03, 0xfe, 0xe3, 0xe3, 0x2e, 0x03, 0x00, 0x00, 0x00, 0x2e,
             //                                  ~~~~~~~~~~  ~~~~~~~~~~  ~~~~~~~~~~  ~~~~  ~~~~ Same
             //                                  Delete      Same        Same        Delete
@@ -332,6 +338,38 @@ mod tests {
                     Same(0xa, 2),
                     Delete(0xc, 1),
                     Same(0xd, 19),
+                ])
+            );
+        }
+    }
+
+    #[test]
+    fn test_crash_minimization() {
+        init();
+
+        // From real world samples
+        let old = vec![
+            0x5c, 0x53, 0x3f, 0x5c, 0x43, 0x5c, 0x53, 0x3f, 0x5c, 0x43, 0xd5, 0xac, 0x32, 0x2a,
+            0xd5, 0xac, 0x43, 0x5c, 0x53, 0x16,
+        ];
+        let new = vec![0x5c, 0x43, 0x5c, 0x53, 0x3f, 0xd5, 0xac, 0x16, 0x5c, 0x16];
+        let diff_chunks = binary_diff_wrapper(&old, &new);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
+        assert!(diff_chunks.is_ok());
+        if let Ok(diff_chunks) = diff_chunks {
+            assert_eq!(
+                diff_chunks,
+                BinaryDiff::from(&vec![
+                    Same(0x0, 01),
+                    Delete(0x1, 3),
+                    Same(0x4, 4),
+                    Delete(0x8, 2),
+                    Same(0xa, 2),
+                    Delete(0xc, 5),
+                    Insert(0x11, vec![0x16]),
+                    Same(0x11, 1),
+                    Delete(0x12, 1),
+                    Same(0x13, 1),
                 ])
             );
         }

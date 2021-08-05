@@ -1,5 +1,6 @@
 use super::super::binary_diff_chunk::BinaryDiffChunk;
 use super::super::error::BinaryDiffError;
+use super::super::helper::find;
 use super::super::helper::read_bytes;
 use super::super::result::Result;
 use bcmp::{longest_common_substring, AlgoSpec};
@@ -35,7 +36,8 @@ pub fn get_delete_chunk<R: Read + Seek>(
     log::trace!("offset = {}, N = {}", offset, N);
 
     if N > 0 {
-        for window in [4, 8, 16, 32, 64] {
+        // NOTE: More values of the window are fine grained, more Delete() chunk become precise.
+        for window in [4, 6, 8, 16, 32, 64] {
             // Find offset that minimizes `offset` of next Same(offset, length)
 
             let old_window = min(window, old_size - offset);
@@ -47,34 +49,84 @@ pub fn get_delete_chunk<R: Read + Seek>(
             let old_bytes = read_bytes(old, old_window)?;
             let new_bytes = read_bytes(new, new_window)?;
 
-            let lcs = longest_common_substring(
-                old_bytes.as_slice(),
-                new_bytes.as_slice(),
-                AlgoSpec::HashMatch(1),
-            );
-            log::trace!("old_bytes = {:?}", old_bytes);
-            log::trace!("new_bytes = {:?}", new_bytes);
-            log::trace!("lcs = {:?}", lcs);
-
             // Restore original position
             old.seek_relative(-(old_bytes.len() as i64))
                 .map_err(BinaryDiffError::IoError)?;
             new.seek_relative(-(new_bytes.len() as i64))
                 .map_err(BinaryDiffError::IoError)?;
 
-            if lcs.length > 0 {
-                return if lcs.first_pos > 0 {
-                    old.seek_relative(lcs.first_pos as i64)
-                        .map_err(BinaryDiffError::IoError)?;
-                    Ok(Some(BinaryDiffChunk::Delete(offset, lcs.first_pos)))
-                } else {
-                    // Nothing to be deleted
-                    Ok(None)
+            if window >= 8 {
+                // Algorithm (1): For wide window
+                let lcs = longest_common_substring(
+                    old_bytes.as_slice(),
+                    new_bytes.as_slice(),
+                    AlgoSpec::HashMatch(1),
+                );
+                log::trace!("old_bytes = {:?}", old_bytes);
+                log::trace!("new_bytes = {:?}", new_bytes);
+                log::trace!("lcs = {:?}", lcs);
+
+                if lcs.length > 0 {
+                    return if lcs.first_pos > 0 {
+                        old.seek_relative(lcs.first_pos as i64)
+                            .map_err(BinaryDiffError::IoError)?;
+                        Ok(Some(BinaryDiffChunk::Delete(offset, lcs.first_pos)))
+                    } else {
+                        // Nothing to be deleted
+                        // Next chunk is Insert(offset, new_bytes[0..lcs.second_pos])
+                        Ok(None)
+                    };
+                }
+            } else {
+                // Algorithm (2): For short window
+                // NOTE: window=4 seems to be too short. LCS algorithm dismisses Same() chunk in the next of window
+
+                let next_same_chunk_offset_map = (0..min(window, old_bytes.len()))
+                    .map(|i| (i, find(new_bytes.as_slice(), &[old_bytes[i]])));
+
+                let next_same_offset = {
+                    let allowing_insert_chunk = next_same_chunk_offset_map
+                        .clone()
+                        .filter(|(_, v)| match v {
+                            Some(v) => v > &0,
+                            None => false,
+                        })
+                        .min_by_key(|(_, v)| v.clone());
+                    let disallowing_insert_chunk = next_same_chunk_offset_map
+                        .filter(|(_, v)| match v {
+                            Some(v) => v == &0,
+                            None => false,
+                        })
+                        .min_by_key(|(v, _)| v.clone());
+
+                    // Determine next chunk by checking
+                    // which next possible Insert() or Same() chunk is CLOSED to current Delete() chunk.
+                    match (allowing_insert_chunk, disallowing_insert_chunk) {
+                        (Some((offset_if_allowed, _)), Some((offset_if_disallowed, _))) => {
+                            Some(offset_if_disallowed) // To decrease number of Insert() chunk
+                        }
+                        (Some((offset_if_allowed, _)), None) => Some(offset_if_allowed),
+                        (None, Some((offset_if_disallowed, _))) => Some(offset_if_disallowed),
+                        (None, None) => None,
+                    }
                 };
+
+                match next_same_offset {
+                    Some(next_same_offset) => return if next_same_offset > 0 {
+                        old.seek_relative(next_same_offset as i64)
+                            .map_err(BinaryDiffError::IoError)?;
+                        Ok(Some(BinaryDiffChunk::Delete(offset, next_same_offset)))
+                    } else {
+                        // Next chunk is Insert(offset, new_bytes[0..min(find(...))])
+                        Ok(None)
+                    },
+                    None => (), // Continue loop to check next window
+                }
             }
         }
 
-        // Delete bytes until same byte appears
+        // Algorithm (3): Delete bytes until same byte appears
+        // NOTE: Next chunk CANNOT be Insert()
         let new_byte = read_bytes(new, 1)?;
         new.seek_relative(-(new_byte.len() as i64))
             .map_err(BinaryDiffError::IoError)?;
@@ -83,7 +135,7 @@ pub fn get_delete_chunk<R: Read + Seek>(
             if old_byte == new_byte {
                 old.seek_relative(-(old_byte.len() as i64))
                     .map_err(BinaryDiffError::IoError)?;
-                return Ok(Some(BinaryDiffChunk::Delete(i, i - offset)));
+                return Ok(Some(BinaryDiffChunk::Delete(offset, i - offset)));
             }
         }
 
