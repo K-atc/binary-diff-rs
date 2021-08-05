@@ -102,11 +102,9 @@ pub fn get_delete_chunk<R: Read + Seek>(
                     // Determine next chunk by checking
                     // which next possible Insert() or Same() chunk is CLOSED to current Delete() chunk.
                     match (allowing_insert_chunk, disallowing_insert_chunk) {
-                        (Some((offset_if_allowed, _)), Some((offset_if_disallowed, _))) => {
-                            Some(offset_if_disallowed) // To decrease number of Insert() chunk
-                        }
+                        // To decrease number of Insert() chunk
+                        (_, Some((offset_if_disallowed, _))) => Some(offset_if_disallowed),
                         (Some((offset_if_allowed, _)), None) => Some(offset_if_allowed),
-                        (None, Some((offset_if_disallowed, _))) => Some(offset_if_disallowed),
                         (None, None) => None,
                     }
                 };
