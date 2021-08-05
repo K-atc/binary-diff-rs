@@ -298,4 +298,35 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_chunks_same_delete_same_delete_insert_same() {
+        init();
+
+        // From real world samples
+        let old = vec![
+            0x2e, 0x03, 0x00, 0x00, 0x03, 0xfe, 0xe3, 0xe3, 0x2e, 0x03, 0x00, 0x00, 0x00, 0x2e,
+            0x03, 0x00,
+        ];
+        let new = vec![
+            0x2e, 0x03, 0x00, 0x00, 0x03, 0xfe, 0x2e, 0x03, 0x18, 0x03, 0x18, 0x00, 0x00, 0x2e,
+            0x03, 0x00,
+        ];
+        let diff_chunks = binary_diff_wrapper(&old, &new);
+        log::trace!("[*] diff() = {:?}", diff_chunks);
+        assert!(diff_chunks.is_ok());
+        if let Ok(diff_chunks) = diff_chunks {
+            assert_eq!(
+                diff_chunks,
+                BinaryDiff::from(&vec![
+                    Same(0x0, 0x6),
+                    Delete(0x6, 0x2),
+                    Same(0x8, 0x2),
+                    Delete(0xa, 0x3),
+                    Insert(0xd, vec![0x18, 0x03, 0x18, 0x00, 0x00]),
+                    Same(0xd, 3),
+                ])
+            );
+        }
+    }
 }

@@ -34,20 +34,23 @@ pub fn get_delete_chunk<R: Read + Seek>(
     log::trace!("[*] get_delete_chunk(): offset = {}, N = {}", offset, N);
 
     if N > 0 {
-        let window = min(32, new_size - new_position);
+        let old_window = min(32, old_size - offset);
+        let new_window = min(32, new_size - new_position);
 
-        let new_bytes_in_window = read_bytes(new, window)?;
-        new.seek_relative(-(window as i64))
+        let old_bytes = read_bytes(old, old_window)?;
+        old.seek_relative(-(old_bytes.len() as i64))
             .map_err(BinaryDiffError::IoError)?;
-        let old_buf = read_bytes(old, N)?;
+        let new_bytes = read_bytes(new, new_window)?;
+        new.seek_relative(-(new_bytes.len() as i64))
+            .map_err(BinaryDiffError::IoError)?;
 
         // Find offset that minimizes `offset` of next Same(offset, length)
-        if let Some((next_same_offset, _)) = (0..N)
-            .map(|i| (i, find(new_bytes_in_window.as_slice(), &[old_buf[i]])))
+        if let Some((next_same_offset, _)) = (0..old_window)
+            .map(|i| (i, find(new_bytes.as_slice(), &[old_bytes[i]])))
             .filter(|(_, v)| v.is_some())
             .min_by_key(|(_, v)| v.clone())
         {
-            old.seek_relative(-(N as i64) + next_same_offset as i64)
+            old.seek_relative(next_same_offset as i64)
                 .map_err(BinaryDiffError::IoError)?;
             return if next_same_offset > 0 {
                 Ok(Some(BinaryDiffChunk::Delete(offset, next_same_offset)))
@@ -56,7 +59,17 @@ pub fn get_delete_chunk<R: Read + Seek>(
             };
         }
 
-        Ok(Some(BinaryDiffChunk::Delete(offset, N)))
+        // Delete bytes until same byte appears
+        let new_byte = read_bytes(new, 1)?;
+        new.seek_relative(-(new_byte.len() as i64)).map_err(BinaryDiffError::IoError)?;
+        for i in offset..old_size {
+            let old_byte =  read_bytes(old, 1)?;
+            if old_byte == new_byte {
+                old.seek_relative(-(old_byte.len() as i64)).map_err(BinaryDiffError::IoError)?;
+                return Ok(Some(BinaryDiffChunk::Delete(i, i - offset)))
+            }
+        }
+        Ok(Some(BinaryDiffChunk::Delete(offset, old_size - offset)))
     } else {
         Ok(None)
     }

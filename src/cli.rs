@@ -41,21 +41,24 @@ fn main() {
 
     let diff = match (matches.value_of("FILE1"), matches.value_of("FILE2")) {
         (Some(file_path_1), Some(file_path_2)) => {
-            let (file_1, file_2) = match (std::fs::File::open(file_path_1), std::fs::File::open(file_path_2)) {
+            let (file_1, file_2) = match (
+                std::fs::File::open(file_path_1),
+                std::fs::File::open(file_path_2),
+            ) {
                 (Ok(file_1), Ok(file_2)) => (file_1, file_2),
                 (Err(why), Ok(_)) => {
                     eprintln!("[!] File {} does not exist: {:?}", file_path_1, why);
-                    return
+                    return;
                 }
                 (Ok(_), Err(why)) => {
                     eprintln!("[!] File {} does not exist: {:?}", file_path_2, why);
-                    return
+                    return;
                 }
                 (Err(why_1), Err(why_2)) => {
                     eprintln!("[!] Both of files does not exist");
                     eprintln!("\t{} does not exist: {:?}", file_path_1, why_1);
                     eprintln!("\t{} does not exist: {:?}", file_path_2, why_2);
-                    return
+                    return;
                 }
             };
             BinaryDiff::new(&mut BufReader::new(file_1), &mut BufReader::new(file_2)).unwrap()

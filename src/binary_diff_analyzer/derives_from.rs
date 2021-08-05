@@ -33,7 +33,7 @@ impl<'a> DerivesFrom<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{DerivesFrom, BinaryDiffChunk};
+    use crate::{BinaryDiffChunk, DerivesFrom};
 
     #[test]
     fn test_derives_from_same() {
