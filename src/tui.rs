@@ -5,12 +5,15 @@ extern crate tui;
 
 mod util;
 
+use binary_diff::{BinaryDiff, BinaryDiffChunk};
 use clap::{App, Arg};
 use std::cmp::min;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
@@ -24,11 +27,60 @@ use tui::{
 };
 use util::event::{Event, Events};
 
-fn render_xxd(file_path: &Path) -> Vec<Spans> {
-    let mut file = File::open(file_path).unwrap();
+enum ComparedFile<'a> {
+    Before(&'a Path),
+    After(&'a Path),
+}
+
+fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Spans<'a>> {
+    let mut file = match compared_file {
+        ComparedFile::Before(path) => File::open(path),
+        ComparedFile::After(path) => File::open(path),
+    }.unwrap();
 
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes);
+
+    let highlight_color = match compared_file {
+        ComparedFile::Before(_) => Color::Red,
+        ComparedFile::After(_) => Color::Blue,
+    };
+    let highlight_chunks = {
+        let mut highlight_chunks: HashSet<usize> = HashSet::new();
+        match compared_file {
+            ComparedFile::Before(_) => {
+                for chunk in diff.chunks() {
+                    if let BinaryDiffChunk::Delete(offset, length) = chunk {
+                        for i in usize::from(offset.clone())..usize::from(offset + length) {
+                            highlight_chunks.insert(i.clone());
+                        }
+                    }
+                }
+            }
+            ComparedFile::After(_) => {
+                let mut offset = 0;
+                for chunk in diff.chunks() {
+                    match chunk {
+                        BinaryDiffChunk::Insert(_, bytes) => {
+                            for i in offset..offset + bytes.len() {
+                                highlight_chunks.insert(i);
+                            }
+                            offset += bytes.len()
+                        }
+                        BinaryDiffChunk::Replace(_, _, bytes) => {
+                            for i in offset..offset + bytes.len() {
+                                highlight_chunks.insert(i);
+                            }
+                            offset += bytes.len()
+                        }
+                        BinaryDiffChunk::Same(_, length) => offset += length,
+                        BinaryDiffChunk::Delete(..) => (), // NOTE: This chunk does not affect after file
+                    }
+                }
+            }
+        }
+        highlight_chunks
+    };
 
     let mut text: Vec<Spans> = Vec::new();
     text.push(Spans::from(format!("Load {} bytes", bytes.len()))); // DEBUG:
@@ -41,7 +93,15 @@ fn render_xxd(file_path: &Path) -> Vec<Spans> {
                 line.push(Span::from(" "))
             }
             if i < bytes.len() {
-                line.push(Span::from(format!("{:02x}", bytes[i])));
+                let span_text = format!("{:02x}", bytes[i]);
+                if highlight_chunks.contains(&i) {
+                    line.push(Span::styled(
+                        span_text,
+                        Style::default().fg(Color::White).bg(highlight_color),
+                    ))
+                } else {
+                    line.push(Span::from(span_text));
+                }
             } else {
                 line.push(Span::from(format!("  ")));
             }
@@ -106,6 +166,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         terminal.draw(|f| {
             let size = f.size();
 
+            let files_to_be_compared = (files[page / 2].as_path(), files[page / 2 + 1].as_path());
+            let diff = BinaryDiff::new(
+                &mut BufReader::new(File::open(files_to_be_compared.0).unwrap()),
+                &mut BufReader::new(File::open(files_to_be_compared.1).unwrap()),
+            )
+            .unwrap();
+
             let block = Block::default().style(Style::default().bg(Color::Reset).fg(Color::Reset));
             f.render_widget(block, size);
 
@@ -117,8 +184,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let title = format!(
                 "{}:{}",
-                files[page / 2].file_name().unwrap().to_string_lossy(),
-                files[page / 2 + 1].file_name().unwrap().to_string_lossy()
+                files_to_be_compared
+                    .0
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy(),
+                files_to_be_compared
+                    .1
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
             )
             .to_string();
             let paragraph = Paragraph::new(title.as_str())
@@ -146,7 +221,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
             let current_file = files[page / 2 + page % 2].as_path();
             let frame_title = format!("[{}]", current_file.display()).to_string();
-            let paragraph = Paragraph::new(render_xxd(current_file))
+            let file = if page % 2 == 0 {
+                ComparedFile::Before(current_file)
+            } else {
+                ComparedFile::After(current_file)
+            };
+            let paragraph = Paragraph::new(render_xxd(file, &diff))
                 .style(Style::default())
                 .block(create_block(frame_title.as_str()))
                 .alignment(Alignment::Left);
