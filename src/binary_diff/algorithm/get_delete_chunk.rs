@@ -110,14 +110,16 @@ pub fn get_delete_chunk<R: Read + Seek>(
                 };
 
                 match next_same_offset {
-                    Some(next_same_offset) => return if next_same_offset > 0 {
-                        old.seek_relative(next_same_offset as i64)
-                            .map_err(BinaryDiffError::IoError)?;
-                        Ok(Some(BinaryDiffChunk::Delete(offset, next_same_offset)))
-                    } else {
-                        // Next chunk is Insert(offset, new_bytes[0..min(find(...))])
-                        Ok(None)
-                    },
+                    Some(next_same_offset) => {
+                        return if next_same_offset > 0 {
+                            old.seek_relative(next_same_offset as i64)
+                                .map_err(BinaryDiffError::IoError)?;
+                            Ok(Some(BinaryDiffChunk::Delete(offset, next_same_offset)))
+                        } else {
+                            // Next chunk is Insert(offset, new_bytes[0..min(find(...))])
+                            Ok(None)
+                        };
+                    }
                     None => (), // Continue loop to check next window
                 }
             }
