@@ -261,7 +261,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         match events.next()? {
             Event::Input(key) => match key {
                 Key::Char('q') => break,
-                Key::Right => page = min(page.saturating_add(1), 2 * (files.len() - 1)),
+                Key::Right => page = min(page + 1, (files.len() - 1) * 2 - 1),
                 Key::Left => page = page.saturating_sub(1),
                 Key::Down => scroll = scroll.saturating_add(1),
                 Key::Up => scroll = scroll.saturating_sub(1),
