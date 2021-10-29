@@ -149,7 +149,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .arg(
             Arg::with_name("FILE")
                 .help("Files to compare")
-                .required(true)
+                .required(false)
                 .multiple(true)
                 .index(1),
         )
@@ -170,11 +170,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         match matches.values_of("FILE") {
             Some(files) => {
-                if files.len() < 2 {
-                    panic!("Specify more than 2 FILEs")
-                } else {
-                    files.map(|file| Path::new(file).to_path_buf()).collect()
-                }
+                files.map(|file| Path::new(file).to_path_buf()).collect()
             }
             None => {
                 panic!("FILE is not specified")
@@ -182,6 +178,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     log::info!("files = {:?}", files);
+    if files.len() < 2 {
+        panic!("Specify more than 2 FILEs")
+    }
 
     let stdout = io::stdout().into_raw_mode()?;
     let stdout = MouseTerminal::from(stdout);
