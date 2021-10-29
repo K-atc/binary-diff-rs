@@ -14,14 +14,14 @@ Requirements
 How to install
 ----
 ```shell
-cargo install --git https://github.com/K-atc/binary-diff-rs.git --features bin
+cargo install --git https://github.com/K-atc/binary-diff-rs.git --all-features
 ```
 
 
 How to build
 ----
 ```shell
-cargo build --features bin
+cargo build --all-features
 ```
 
 

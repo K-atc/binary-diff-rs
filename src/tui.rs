@@ -214,21 +214,31 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .constraints([Constraint::Max(1), Constraint::Percentage(50)].as_ref())
                 .split(size);
 
-            let title = format!(
-                "{}:{}",
+            let (color_before, color_after) = if page % 2 == 0 {
+                (Color::Yellow, Color::Reset)
+            } else {
+                (Color::Reset, Color::Yellow)
+            };
+            let title = Spans::from(vec![Span::styled(
                 files_to_be_compared
                     .0
                     .file_name()
                     .unwrap()
                     .to_string_lossy(),
+                Style::default().fg(color_before)
+            ),
+                Span::from(" -> "),
+                Span::styled(
                 files_to_be_compared
                     .1
                     .file_name()
                     .unwrap()
                     .to_string_lossy()
-            )
-            .to_string();
-            let paragraph = Paragraph::new(title.as_str())
+                    ,
+                Style::default().fg(color_after)
+                )
+            ]);
+            let paragraph = Paragraph::new(title)
                 .style(Style::default())
                 .block(Block::default().borders(Borders::NONE))
                 .alignment(Alignment::Left);
