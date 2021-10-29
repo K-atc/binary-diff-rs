@@ -17,7 +17,7 @@ use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use simplelog::{ColorChoice, CombinedLogger, Config, LevelFilter, TerminalMode, TermLogger, WriteLogger};
+use simplelog::{ColorChoice, CombinedLogger, Config, LevelFilter, SharedLogger, TerminalMode, TermLogger, WriteLogger};
 #[allow(unused_imports)]
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
@@ -29,6 +29,7 @@ use tui::{
     Terminal,
 };
 use util::event::{Event, Events};
+use std::env;
 
 enum ComparedFile<'a> {
     Before(&'a Path),
@@ -135,12 +136,13 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    CombinedLogger::init(
-        vec![
-            TermLogger::new(LevelFilter::Warn, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
-            WriteLogger::new(LevelFilter::Trace, Config::default(), File::create("binary-diff-tui.log").unwrap()),
-        ]
-    ).unwrap();
+    let mut logger_options: Vec<Box<dyn SharedLogger>> = vec![
+        TermLogger::new(LevelFilter::Warn, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
+    ];
+    if let Ok(_) = env::var("RUST_LOG") {
+        logger_options.push(WriteLogger::new(LevelFilter::Trace, Config::default(), File::create("binary-diff-tui.log").unwrap()))
+    }
+    CombinedLogger::init(logger_options).unwrap();
 
     let matches = App::new("TUI version of binary diff tool")
         .version("1.0")
