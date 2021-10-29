@@ -218,6 +218,15 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Result<V
 }
 
 fn app(files: Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
+    // Check if files exists
+    for file in files.iter() {
+        if let Err(why) = File::open(file) {
+            log::error!("Failed to open file {:?}", file);
+            return Err(Box::new(why));
+        }
+    }
+
+    // Calculate diff
     let mut diff_map: HashMap<(&Path, &Path), BinaryDiff> = HashMap::new();
     for (before, after) in files[0..files.len() - 1]
         .iter()
