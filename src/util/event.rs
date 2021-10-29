@@ -43,7 +43,14 @@ impl Events {
         let input_handle = {
             let tx = tx.clone();
             thread::spawn(move || {
-                let stdin = io::stdin();
+                // Assume stdin is tty
+                let stdin = match termion::get_tty() {
+                    Ok(stdin) => stdin,
+                    Err(why) => {
+                        eprintln!("Failed to get tty: {}", why);
+                        return
+                    }
+                };
                 for evt in stdin.keys() {
                     if let Ok(key) = evt {
                         if let Err(err) = tx.send(Event::Input(key)) {

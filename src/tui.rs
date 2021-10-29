@@ -1,20 +1,23 @@
+#![feature(stdin_forwarders)]
 extern crate binary_diff;
 extern crate clap;
 extern crate termion;
-extern crate tui;
+extern crate tui_rs as tui;
+extern crate simplelog;
 
 mod util;
 
 use binary_diff::{BinaryDiff, BinaryDiffChunk};
 use clap::{App, Arg};
 use std::cmp::min;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use simplelog::{ColorChoice, CombinedLogger, Config, LevelFilter, TerminalMode, TermLogger, WriteLogger};
 #[allow(unused_imports)]
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
@@ -36,7 +39,8 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
     let mut file = match compared_file {
         ComparedFile::Before(path) => File::open(path),
         ComparedFile::After(path) => File::open(path),
-    }.unwrap();
+    }
+    .unwrap();
 
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes);
@@ -83,7 +87,7 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
     };
 
     let mut text: Vec<Spans> = Vec::new();
-    text.push(Spans::from(format!("Load {} bytes", bytes.len()))); // DEBUG:
+    // text.push(Spans::from(format!("Load {} bytes", bytes.len()))); // DEBUG:
     for line_offset in 0..(1 + bytes.len() / 16) {
         let offset = line_offset * 16;
         let mut line: Vec<Span> = Vec::new();
@@ -126,7 +130,12 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    CombinedLogger::init(
+        vec![
+            TermLogger::new(LevelFilter::Warn, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
+            WriteLogger::new(LevelFilter::Trace, Config::default(), File::create("binary-diff-tui.log").unwrap()),
+        ]
+    ).unwrap();
 
     let matches = App::new("TUI version of binary diff tool")
         .version("1.0")
@@ -139,26 +148,53 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .multiple(true)
                 .index(1),
         )
+        .arg(
+            Arg::with_name("stdin")
+                .help("Takes list of FILE from stdin")
+                .long("stdin")
+                .takes_value(false),
+        )
         .get_matches();
 
-    let files: Vec<PathBuf> = match matches.values_of("FILE") {
-        Some(files) => {
-            if files.len() < 2 {
-                panic!("Specify more than 2 FILEs")
-            } else {
-                files.map(|file| Path::new(file).to_path_buf()).collect()
+    let files: Vec<PathBuf> = if matches.is_present("stdin") {
+        let mut files = Vec::new();
+        for line in io::stdin().lines() {
+            files.push(Path::new(&line.unwrap()).to_path_buf())
+        }
+        files
+    } else {
+        match matches.values_of("FILE") {
+            Some(files) => {
+                if files.len() < 2 {
+                    panic!("Specify more than 2 FILEs")
+                } else {
+                    files.map(|file| Path::new(file).to_path_buf()).collect()
+                }
+            }
+            None => {
+                panic!("FILE is not specified")
             }
         }
-        None => panic!("FILE is not specified"),
     };
+    log::info!("files = {:?}", files);
 
     let stdout = io::stdout().into_raw_mode()?;
     let stdout = MouseTerminal::from(stdout);
     let stdout = AlternateScreen::from(stdout);
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+    terminal.hide_cursor()?;
 
     let events = Events::new();
+
+    let mut diff_map: HashMap<(&Path, &Path), BinaryDiff> = HashMap::new();
+    for (before, after) in files[0..files.len() -1].iter().zip(files[1..files.len()].iter()) {
+        diff_map.insert((before, after), BinaryDiff::new(
+            &mut BufReader::new(File::open(before).unwrap()),
+            &mut BufReader::new(File::open(after).unwrap()),
+        )
+            .unwrap());
+    }
 
     let mut scroll: u16 = 0;
     let mut page: usize = 0;
@@ -167,11 +203,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let size = f.size();
 
             let files_to_be_compared = (files[page / 2].as_path(), files[page / 2 + 1].as_path());
-            let diff = BinaryDiff::new(
-                &mut BufReader::new(File::open(files_to_be_compared.0).unwrap()),
-                &mut BufReader::new(File::open(files_to_be_compared.1).unwrap()),
-            )
-            .unwrap();
+            let diff = diff_map.get(&files_to_be_compared).unwrap();
 
             let block = Block::default().style(Style::default().bg(Color::Reset).fg(Color::Reset));
             f.render_widget(block, size);
@@ -202,14 +234,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .alignment(Alignment::Left);
             f.render_widget(paragraph, chunks[0]);
 
-            let long_line = "00000000: 4e6f 7449 6d70 6c65 6d65 6e74 6564 4572  NotImplementedEr";
-
-            // let text = vec![
-            //     Spans::from("This is a line "),
-            //     Spans::from(Span::styled("This is a line   ", Style::default().fg(Color::Red))),
-            //     Spans::from(Span::styled("This is a blue line", Style::default().fg(Color::White).bg(Color::Red))),
-            //     Spans::from(Span::styled(long_line, Style::default().fg(Color::White).bg(Color::Blue))),
-            // ];
             let create_block = |title| {
                 Block::default()
                     .borders(Borders::TOP)
@@ -233,6 +257,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             f.render_widget(paragraph, chunks[1]);
         })?;
 
+        log::trace!("Waiting event");
         match events.next()? {
             Event::Input(key) => match key {
                 Key::Char('q') => break,
@@ -242,7 +267,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Key::Up => scroll = scroll.saturating_sub(1),
                 _ => (),
             },
-            _ => (),
+            event => (),
         };
     }
 
