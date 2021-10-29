@@ -62,10 +62,12 @@ impl BinaryDiff {
             }
             // Infinite loop detection
             if (old_position, new_position) == (current_old_position, current_new_position) {
-                return Err(BinaryDiffError::InfiniteLoopError(
+                let err = Err(BinaryDiffError::InfiniteLoopError(
                     old_position as usize,
                     new_position as usize,
                 ));
+                log::error!("Detected infinite loop. There's a logic error: {:?}", err);
+                return err;
             }
         }
 

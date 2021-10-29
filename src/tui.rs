@@ -34,20 +34,85 @@ use tui::{
 };
 use util::event::{Event, Events};
 
+fn main() {
+    let mut logger_options: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
+        LevelFilter::Warn,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )];
+    if let Ok(_) = env::var("RUST_LOG") {
+        logger_options.push(WriteLogger::new(
+            LevelFilter::Trace,
+            Config::default(),
+            File::create("binary-diff-tui.log").unwrap(),
+        ))
+    }
+    CombinedLogger::init(logger_options).unwrap();
+
+    let matches = App::new("TUI version of binary diff tool")
+        .version("1.0")
+        .author("Nao Tomori (@K_atc)")
+        .about("Show changes between two binaries in xdd format in TUI")
+        .arg(
+            Arg::with_name("FILE")
+                .help("Files to compare")
+                .required(false)
+                .multiple(true)
+                .index(1),
+        )
+        .arg(
+            Arg::with_name("stdin")
+                .help("Takes list of FILE from stdin")
+                .long("stdin")
+                .takes_value(false),
+        )
+        .get_matches();
+
+    let files: Vec<PathBuf> = if matches.is_present("stdin") {
+        let mut files = Vec::new();
+        for line in io::stdin().lines() {
+            match line {
+                Ok(ref line) => {
+                    if line.len() > 0 {
+                        files.push(Path::new(line).to_path_buf())
+                    } else {
+                        log::warn!("Stdin contains *null* line. Skipped this line")
+                    }
+                }
+                Err(why) => panic!("Failed to read line: {:?}", why),
+            }
+        }
+        files
+    } else {
+        match matches.values_of("FILE") {
+            Some(files) => files.map(|file| Path::new(file).to_path_buf()).collect(),
+            None => {
+                panic!("FILE is not specified")
+            }
+        }
+    };
+    log::info!("files = {:?}", files);
+    if files.len() < 2 {
+        panic!("Specify more than 2 FILEs")
+    }
+
+    app(files).unwrap();
+}
+
 enum ComparedFile<'a> {
     Before(&'a Path),
     After(&'a Path),
 }
 
-fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Spans<'a>> {
+fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Result<Vec<Spans<'a>>, io::Error> {
     let mut file = match compared_file {
-        ComparedFile::Before(path) => File::open(path),
-        ComparedFile::After(path) => File::open(path),
-    }
-    .unwrap();
+        ComparedFile::Before(path) => File::open(path)?,
+        ComparedFile::After(path) => File::open(path)?,
+    };
 
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes).unwrap();
+    file.read_to_end(&mut bytes)?;
 
     let highlight_color = match compared_file {
         ComparedFile::Before(_) => Color::Red,
@@ -149,62 +214,24 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
         text.push(Spans::from(line));
     }
 
-    text
+    Ok(text)
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut logger_options: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
-        LevelFilter::Warn,
-        Config::default(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )];
-    if let Ok(_) = env::var("RUST_LOG") {
-        logger_options.push(WriteLogger::new(
-            LevelFilter::Trace,
-            Config::default(),
-            File::create("binary-diff-tui.log").unwrap(),
-        ))
+fn app(files: Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
+    let mut diff_map: HashMap<(&Path, &Path), BinaryDiff> = HashMap::new();
+    for (before, after) in files[0..files.len() - 1]
+        .iter()
+        .zip(files[1..files.len()].iter())
+    {
+        diff_map.insert(
+            (before, after),
+            BinaryDiff::new(
+                &mut BufReader::new(File::open(before)?),
+                &mut BufReader::new(File::open(after)?),
+            ).unwrap(),
+        );
     }
-    CombinedLogger::init(logger_options).unwrap();
-
-    let matches = App::new("TUI version of binary diff tool")
-        .version("1.0")
-        .author("Nao Tomori (@K_atc)")
-        .about("Show changes between two binaries in xdd format in TUI")
-        .arg(
-            Arg::with_name("FILE")
-                .help("Files to compare")
-                .required(false)
-                .multiple(true)
-                .index(1),
-        )
-        .arg(
-            Arg::with_name("stdin")
-                .help("Takes list of FILE from stdin")
-                .long("stdin")
-                .takes_value(false),
-        )
-        .get_matches();
-
-    let files: Vec<PathBuf> = if matches.is_present("stdin") {
-        let mut files = Vec::new();
-        for line in io::stdin().lines() {
-            files.push(Path::new(&line.unwrap()).to_path_buf())
-        }
-        files
-    } else {
-        match matches.values_of("FILE") {
-            Some(files) => files.map(|file| Path::new(file).to_path_buf()).collect(),
-            None => {
-                panic!("FILE is not specified")
-            }
-        }
-    };
-    log::info!("files = {:?}", files);
-    if files.len() < 2 {
-        panic!("Specify more than 2 FILEs")
-    }
+    log::info!("Calculating diff done");
 
     let stdout = io::stdout().into_raw_mode()?;
     let stdout = MouseTerminal::from(stdout);
@@ -214,21 +241,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     terminal.hide_cursor()?;
 
     let events = Events::new();
-
-    let mut diff_map: HashMap<(&Path, &Path), BinaryDiff> = HashMap::new();
-    for (before, after) in files[0..files.len() - 1]
-        .iter()
-        .zip(files[1..files.len()].iter())
-    {
-        diff_map.insert(
-            (before, after),
-            BinaryDiff::new(
-                &mut BufReader::new(File::open(before).unwrap()),
-                &mut BufReader::new(File::open(after).unwrap()),
-            )
-            .unwrap(),
-        );
-    }
 
     let mut scroll: u16 = 0;
     let mut page: usize = 0;
@@ -294,7 +306,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             } else {
                 ComparedFile::After(current_file)
             };
-            let paragraph = Paragraph::new(render_xxd(file, &diff))
+            let paragraph = Paragraph::new(render_xxd(file, &diff).unwrap())
                 .style(Style::default())
                 .block(create_block(frame_title.as_str()))
                 .scroll((scroll, 0))
@@ -302,7 +314,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             f.render_widget(paragraph, chunks[1]);
         })?;
 
-        log::trace!("Waiting event");
         match events.next()? {
             Event::Input(key) => match key {
                 Key::Char('q') => break,
