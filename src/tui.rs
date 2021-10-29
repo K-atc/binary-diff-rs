@@ -43,7 +43,7 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
     .unwrap();
 
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes);
+    file.read_to_end(&mut bytes).unwrap();
 
     let highlight_color = match compared_file {
         ComparedFile::Before(_) => Color::Red,
@@ -114,10 +114,15 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
         for i in offset + 0..offset + 16 {
             if i < bytes.len() {
                 let byte_char = char::from(bytes[i]);
-                if byte_char.is_ascii_graphic() {
-                    line.push(Span::from(format!("{}", byte_char)));
+                let (fg, bg) = if highlight_chunks.contains(&i) {
+                    (Color::White, highlight_color)
                 } else {
-                    line.push(Span::styled(".", Style::default().fg(Color::DarkGray)));
+                    (Color::Reset, Color::Reset)
+                };
+                if byte_char.is_ascii_graphic() {
+                    line.push(Span::styled(format!("{}", byte_char), Style::default().fg(fg).bg(bg)));
+                } else {
+                    line.push(Span::styled(".", Style::default().fg(Color::DarkGray).bg(bg)));
                 }
             } else {
                 break;
@@ -277,7 +282,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Key::Up => scroll = scroll.saturating_sub(1),
                 _ => (),
             },
-            event => (),
+            _ => (),
         };
     }
 
