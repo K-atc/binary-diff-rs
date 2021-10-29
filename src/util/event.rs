@@ -48,7 +48,7 @@ impl Events {
                     Ok(stdin) => stdin,
                     Err(why) => {
                         eprintln!("Failed to get tty: {}", why);
-                        return
+                        return;
                     }
                 };
                 for evt in stdin.keys() {

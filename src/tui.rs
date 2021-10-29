@@ -1,23 +1,27 @@
 #![feature(stdin_forwarders)]
 extern crate binary_diff;
 extern crate clap;
+extern crate simplelog;
 extern crate termion;
 extern crate tui_rs as tui;
-extern crate simplelog;
 
 mod util;
 
 use binary_diff::{BinaryDiff, BinaryDiffChunk};
 use clap::{App, Arg};
+use simplelog::{
+    ColorChoice, CombinedLogger, Config, LevelFilter, SharedLogger, TermLogger, TerminalMode,
+    WriteLogger,
+};
 use std::cmp::min;
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use simplelog::{ColorChoice, CombinedLogger, Config, LevelFilter, SharedLogger, TerminalMode, TermLogger, WriteLogger};
 #[allow(unused_imports)]
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
@@ -29,7 +33,6 @@ use tui::{
     Terminal,
 };
 use util::event::{Event, Events};
-use std::env;
 
 enum ComparedFile<'a> {
     Before(&'a Path),
@@ -95,7 +98,15 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
         line.push(Span::from(format!("{:08x}:", offset)));
         for i in offset + 0..offset + 16 {
             if i % 2 == 0 {
-                line.push(Span::from(" "))
+                let color = if (i % 16) > 0
+                    && highlight_chunks.contains(&(i - 1))
+                    && highlight_chunks.contains(&i)
+                {
+                    highlight_color
+                } else {
+                    Color::Reset
+                };
+                line.push(Span::styled(" ", Style::default().bg(color)))
             }
             if i < bytes.len() {
                 let span_text = format!("{:02x}", bytes[i]);
@@ -121,9 +132,15 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
                     (Color::Reset, Color::Reset)
                 };
                 if byte_char.is_ascii_graphic() {
-                    line.push(Span::styled(format!("{}", byte_char), Style::default().fg(fg).bg(bg)));
+                    line.push(Span::styled(
+                        format!("{}", byte_char),
+                        Style::default().fg(fg).bg(bg),
+                    ));
                 } else {
-                    line.push(Span::styled(".", Style::default().fg(Color::DarkGray).bg(bg)));
+                    line.push(Span::styled(
+                        ".",
+                        Style::default().fg(Color::DarkGray).bg(bg),
+                    ));
                 }
             } else {
                 break;
@@ -136,11 +153,18 @@ fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Vec<Span
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut logger_options: Vec<Box<dyn SharedLogger>> = vec![
-        TermLogger::new(LevelFilter::Warn, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
-    ];
+    let mut logger_options: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
+        LevelFilter::Warn,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )];
     if let Ok(_) = env::var("RUST_LOG") {
-        logger_options.push(WriteLogger::new(LevelFilter::Trace, Config::default(), File::create("binary-diff-tui.log").unwrap()))
+        logger_options.push(WriteLogger::new(
+            LevelFilter::Trace,
+            Config::default(),
+            File::create("binary-diff-tui.log").unwrap(),
+        ))
     }
     CombinedLogger::init(logger_options).unwrap();
 
@@ -171,9 +195,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         files
     } else {
         match matches.values_of("FILE") {
-            Some(files) => {
-                files.map(|file| Path::new(file).to_path_buf()).collect()
-            }
+            Some(files) => files.map(|file| Path::new(file).to_path_buf()).collect(),
             None => {
                 panic!("FILE is not specified")
             }
@@ -194,12 +216,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     let events = Events::new();
 
     let mut diff_map: HashMap<(&Path, &Path), BinaryDiff> = HashMap::new();
-    for (before, after) in files[0..files.len() -1].iter().zip(files[1..files.len()].iter()) {
-        diff_map.insert((before, after), BinaryDiff::new(
-            &mut BufReader::new(File::open(before).unwrap()),
-            &mut BufReader::new(File::open(after).unwrap()),
-        )
-            .unwrap());
+    for (before, after) in files[0..files.len() - 1]
+        .iter()
+        .zip(files[1..files.len()].iter())
+    {
+        diff_map.insert(
+            (before, after),
+            BinaryDiff::new(
+                &mut BufReader::new(File::open(before).unwrap()),
+                &mut BufReader::new(File::open(after).unwrap()),
+            )
+            .unwrap(),
+        );
     }
 
     let mut scroll: u16 = 0;
@@ -225,24 +253,24 @@ fn main() -> Result<(), Box<dyn Error>> {
             } else {
                 (Color::Reset, Color::Yellow)
             };
-            let title = Spans::from(vec![Span::styled(
-                files_to_be_compared
-                    .0
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy(),
-                Style::default().fg(color_before)
-            ),
+            let title = Spans::from(vec![
+                Span::styled(
+                    files_to_be_compared
+                        .0
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy(),
+                    Style::default().fg(color_before),
+                ),
                 Span::from(" -> "),
                 Span::styled(
-                files_to_be_compared
-                    .1
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    ,
-                Style::default().fg(color_after)
-                )
+                    files_to_be_compared
+                        .1
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy(),
+                    Style::default().fg(color_after),
+                ),
             ]);
             let paragraph = Paragraph::new(title)
                 .style(Style::default())
