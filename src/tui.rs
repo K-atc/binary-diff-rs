@@ -269,6 +269,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let paragraph = Paragraph::new(render_xxd(file, &diff))
                 .style(Style::default())
                 .block(create_block(frame_title.as_str()))
+                .scroll((scroll, 0))
                 .alignment(Alignment::Left);
             f.render_widget(paragraph, chunks[1]);
         })?;
