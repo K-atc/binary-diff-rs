@@ -25,7 +25,7 @@ pub fn get_insert_chunk<R: Read + Seek>(
 
     if offset < old_size {
         // NOTE: window=2 is required to detect Insert(offset, length=1) chunk
-        for window in [4, 8, 16, 32, 64, 128, 2] {
+        for window in [4, 8, 16, 32, 2] {
             let old_bytes = read_bytes(old, min(window, old_size - offset))?;
             let new_bytes = read_bytes(new, min(window, N))?;
 
