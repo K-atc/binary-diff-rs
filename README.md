@@ -25,6 +25,13 @@ cargo build --all-features
 ```
 
 
+How to test
+----
+```shell
+RUST_LOG=debug cargo test
+```
+
+
 Running examples
 ----
 ### Seed files comparison

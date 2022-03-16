@@ -1,9 +1,9 @@
 use super::super::binary_diff_chunk::BinaryDiffChunk;
 use super::super::error::BinaryDiffError;
 use super::super::result::Result;
-use crate::binary_diff::helper::read_one_byte;
 use std::cmp::min;
 use std::io::{BufReader, Read, Seek};
+use crate::binary_diff::helper::read_one_byte;
 
 // get_same_chunk() should satisfy following requirements:
 //   - Maximize `length` of Same(offset, length)
@@ -26,6 +26,7 @@ pub fn get_same_chunk<R: Read + Seek>(
         return Ok(None);
     }
 
+    // Assume same chunk is generated if only if first byte of old and new are same.
     for i in 0usize..N {
         let old_buf = read_one_byte(old)?;
         let new_buf = read_one_byte(new)?;

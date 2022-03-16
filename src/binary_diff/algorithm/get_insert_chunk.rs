@@ -25,7 +25,7 @@ pub fn get_insert_chunk<R: Read + Seek>(
 
     if offset < old_size {
         // NOTE: window=2 is required to detect Insert(offset, length=1) chunk
-        for window in [2, 4, 8, 16, 32, 64] {
+        for window in [4, 8, 16, 32, 64, 128, 2] {
             let old_bytes = read_bytes(old, min(window, old_size - offset))?;
             let new_bytes = read_bytes(new, min(window, N))?;
 
@@ -68,7 +68,7 @@ pub fn get_insert_chunk<R: Read + Seek>(
             let new_byte = read_bytes(new, 1)?;
             if new_byte == old_byte {
                 return if i > 0 {
-                    new.seek_relative(-(new_byte.len() as i64))
+                    new.seek_relative(-1)
                         .map_err(BinaryDiffError::IoError)?;
                     Ok(Some(BinaryDiffChunk::Insert(offset, bytes)))
                 } else {

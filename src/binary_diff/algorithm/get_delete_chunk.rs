@@ -37,7 +37,8 @@ pub fn get_delete_chunk<R: Read + Seek>(
 
     if N > 0 {
         // NOTE: More values of the window are fine grained, more Delete() chunk become precise.
-        for window in [4, 6, 8, 16, 32, 64] {
+        for window in [6, 8, 16, 32, 64] {
+            log::trace!("window = {}", window);
             // Find offset that minimizes `offset` of next Same(offset, length)
 
             let old_window = min(window, old_size - offset);
@@ -55,7 +56,7 @@ pub fn get_delete_chunk<R: Read + Seek>(
             new.seek_relative(-(new_bytes.len() as i64))
                 .map_err(BinaryDiffError::IoError)?;
 
-            if window >= 8 {
+            if window >= 4 {
                 // Algorithm (1): For wide window
                 let lcs = longest_common_substring(
                     old_bytes.as_slice(),
@@ -74,7 +75,14 @@ pub fn get_delete_chunk<R: Read + Seek>(
                     } else {
                         // Nothing to be deleted
                         // Next chunk is Insert(offset, new_bytes[0..lcs.second_pos])
-                        Ok(None)
+
+                        if lcs.second_pos > 0 {
+                            new.seek_relative(lcs.second_pos as i64)
+                                .map_err(BinaryDiffError::IoError)?;
+                            Ok(Some(BinaryDiffChunk::Insert(offset, new_bytes[0..lcs.second_pos].to_vec())))
+                        } else {
+                            Ok(None)
+                        }
                     };
                 }
             } else {
@@ -85,6 +93,9 @@ pub fn get_delete_chunk<R: Read + Seek>(
                     .map(|i| (i, find(new_bytes.as_slice(), &[old_bytes[i]])));
 
                 let next_same_offset = {
+                    // old: [ a b c ]
+                    //        ~ Delete a & Insert A
+                    // new: [ A b c ]
                     let allowing_insert_chunk = next_same_chunk_offset_map
                         .clone()
                         .filter(|(_, v)| match v {
@@ -92,12 +103,16 @@ pub fn get_delete_chunk<R: Read + Seek>(
                             None => false,
                         })
                         .min_by_key(|(_, v)| v.clone());
+
+                    // old: [ a b c ]
+                    //        ~ Delete a & No insert
+                    // new: [ b c D ]
                     let disallowing_insert_chunk = next_same_chunk_offset_map
                         .filter(|(_, v)| match v {
                             Some(v) => v == &0,
                             None => false,
                         })
-                        .min_by_key(|(v, _)| v.clone());
+                        .min_by_key(|(k, _)| k.clone());
 
                     // Determine next chunk by checking
                     // which next possible Insert() or Same() chunk is CLOSED to current Delete() chunk.
@@ -108,6 +123,7 @@ pub fn get_delete_chunk<R: Read + Seek>(
                         (None, None) => None,
                     }
                 };
+                log::trace!("next_same_offset = {:?}", next_same_offset);
 
                 match next_same_offset {
                     Some(next_same_offset) => {

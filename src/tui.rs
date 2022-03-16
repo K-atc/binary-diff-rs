@@ -22,7 +22,6 @@ use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-#[allow(unused_imports)]
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
     backend::TermionBackend,
@@ -105,7 +104,10 @@ enum ComparedFile<'a> {
     After(&'a Path),
 }
 
-fn render_xxd<'a>(compared_file: ComparedFile, diff: &'a BinaryDiff) -> Result<Vec<Spans<'a>>, io::Error> {
+fn render_xxd<'a>(
+    compared_file: ComparedFile,
+    diff: &'a BinaryDiff,
+) -> Result<Vec<Spans<'a>>, io::Error> {
     let mut file = match compared_file {
         ComparedFile::Before(path) => File::open(path)?,
         ComparedFile::After(path) => File::open(path)?,
@@ -237,7 +239,8 @@ fn app(files: Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
             BinaryDiff::new(
                 &mut BufReader::new(File::open(before)?),
                 &mut BufReader::new(File::open(after)?),
-            ).unwrap(),
+            )
+            .unwrap(),
         );
     }
     log::info!("Calculating diff done");

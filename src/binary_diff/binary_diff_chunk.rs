@@ -7,7 +7,7 @@ type Offset = usize;
 type Length = usize;
 type Bytes = Vec<u8>;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum BinaryDiffChunk {
     Same(Offset, Length),
     Insert(Offset, Bytes),
@@ -88,6 +88,34 @@ fn stringify_bytes(bytes: &Bytes) -> String {
             .collect::<Vec<String>>()
             .join(" ")
     )
+}
+
+impl fmt::Debug for BinaryDiffChunk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Same(offset, length) => {
+                write!(f, "Same(offset={:#x}, length={:#x})", offset, length)
+            }
+            Self::Insert(offset, bytes) => write!(
+                f,
+                "Insert(offset={:#x}, bytes={})",
+                offset,
+                stringify_bytes(bytes)
+            ),
+            Self::Delete(offset, length) => {
+                write!(f, "Delete(offset={:#x}, length={:#x})", offset, length)
+            }
+            Self::Replace(offset, length, bytes) => {
+                write!(
+                    f,
+                    "Replace(offset={:#x}, length={:#x}, bytes={})",
+                    offset,
+                    length,
+                    stringify_bytes(bytes)
+                )
+            }
+        }
+    }
 }
 
 impl fmt::Display for BinaryDiffChunk {
