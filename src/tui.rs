@@ -157,6 +157,7 @@ fn render_xxd<'a>(
         highlight_chunks
     };
 
+    // In hex view
     let mut text: Vec<Spans> = Vec::new();
     // text.push(Spans::from(format!("Load {} bytes", bytes.len()))); // DEBUG:
     for line_offset in 0..(1 + bytes.len() / 16) {
@@ -189,7 +190,11 @@ fn render_xxd<'a>(
                 line.push(Span::from(format!("  ")));
             }
         }
-        line.push(Span::from(" "));
+
+        // Spacer
+        line.push(Span::from("  "));
+
+        // Human readable view
         for i in offset + 0..offset + 16 {
             if i < bytes.len() {
                 let byte_char = char::from(bytes[i]);
