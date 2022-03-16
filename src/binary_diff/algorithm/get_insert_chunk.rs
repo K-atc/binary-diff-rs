@@ -32,7 +32,7 @@ pub fn get_insert_chunk<R: Read + Seek>(
             let lcs = longest_common_substring(
                 old_bytes.as_slice(),
                 new_bytes.as_slice(),
-                AlgoSpec::HashMatch(1),
+                AlgoSpec::HashMatch(if window <= 16 { 1 } else { 2 }),
             );
             log::trace!("old_bytes = {:?}", old_bytes);
             log::trace!("new_bytes = {:?}", new_bytes);
